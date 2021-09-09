@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import sys
 
 
 # function to return element-wise sigmoid matrix of "matrix"
@@ -14,7 +15,7 @@ def sigmoid(matrix):
 def logistic_regression(logisticX, logisticY):
 
     # read "linearX" (CSV) file
-    df = pd.read_csv(linearX, header=None)
+    df = pd.read_csv(logisticX, header=None)
     # convert into numpy array
     X_train = df.to_numpy()
     
@@ -35,7 +36,7 @@ def logistic_regression(logisticX, logisticY):
     X = np.column_stack((np.ones((m, 1)), X_norm))
 
     # read "linearY" (CSV) file
-    df = pd.read_csv(linearY, header=None)
+    df = pd.read_csv(logisticY, header=None)
     # convert into numpy array Y (class notation)
     Y = df.to_numpy()
 
@@ -56,7 +57,7 @@ def logistic_regression(logisticX, logisticY):
     theta = np.zeros((n + 1, 1))
     
     # set convergence threshold
-    epsilon = 0.0001
+    epsilon = 1e-4
 
     # learn parameters (theta) using Newton's method (maximise log likelihood)
     # initial hypothesis function: sigmoid function; @ performs matrix multiplication
@@ -77,10 +78,10 @@ def logistic_regression(logisticX, logisticY):
         # h_temp is a column vector that stores the element-wise product h(x_i) * (1 - h(x_i)) 
         # * does element-wise multiplication
         h_temp = h * (1 - h)
-        # D_h is the diagonal matrix (m by m) where entry in ith row is h(x_i) (1 - h(x_i))
+        # D_h is the diagonal matrix (m by m) where entry in ith row is h(x_i) * (1 - h(x_i))
         # create diagonal matrix out of h_temp
         D_h = np.diagflat(h_temp)
-        # compute hessian matrix of J using expression: H = X' @ D_h @ X, where ' denotes transpose
+        # compute hessian matrix of NLL using expression: H = X' @ D_h @ X, where ' denotes transpose
         H = X.T @ D_h @ X
 
         # update theta using Newton's method
@@ -101,58 +102,75 @@ def logistic_regression(logisticX, logisticY):
     # return learnt parameter (optimises LL) and other parameters used in plotting
     return theta, X, X_mean, X_std, Y, m
 
-linearX = "logisticX.csv"
-linearY = "logisticY.csv"
+# driver function, parses command line arguments, invokes other methods and plots graph
+def main():
+    # parse command line arguments
+    if len(sys.argv) < 3:
+        print("Error: Insufficient number of arguments are provided. Program terminating!")
+        return
+    if len(sys.argv) > 3:
+        print("Warning: Extra command line arguments are provided. Three arguments are expected!")
+    
+    # store file names containing input and output values respectively
+    linearX = sys.argv[1]
+    linearY = sys.argv[2]
 
-theta, X, X_mean, X_std, Y, m = logistic_regression(linearX, linearY)
+    # train logisitic regression model
+    theta, X, X_mean, X_std, Y, m = logistic_regression(linearX, linearY)
+    # check for errors
+    if theta.size == None:
+        return
 
-# filter normalized data for plotting (according to their target values)
-# output_0 store those inputs which correspond to target value 0 and output_1 stores those inputs which correspond to target value 1
-output_0_x1 = []
-output_0_x2 = []
-output_1_x1 = []
-output_1_x2 = []
-for i in range(0, m):
-    if Y[i] == 1:
-        output_1_x1.append(X[i, 1])
-        output_1_x2.append(X[i, 2])
+    # print theta
+    print("Learnt parameter: " + str(theta))
+
+    # filter normalized data for plotting (according to their target values)
+    # output_0 store those inputs which correspond to target value 0 and output_1 stores those inputs which correspond to target value 1
+    output_0_x1 = []
+    output_0_x2 = []
+    output_1_x1 = []
+    output_1_x2 = []
+    for i in range(0, m):
+        if Y[i] == 1:
+            output_1_x1.append(X[i, 1])
+            output_1_x2.append(X[i, 2])
+        else:
+            output_0_x1.append(X[i, 1])
+            output_0_x2.append(X[i, 2])
+
+    # Figure 1: plot training data (normalized) with label, 0 (triangle) and 1 (square)
+    plt.figure(1)
+    plt.title("Logistic Regression Model")
+    # plot points that have target value 0
+    plt.scatter(output_0_x1, output_0_x2, marker="^", color="red", label="Target Value = 0")
+    # plot points that have target value 1
+    plt.scatter(output_1_x1, output_1_x2, marker="s", color="green", label="Target Value = 1")
+
+    # get limits of x-axis (x1), and sample m input points (x1_sample) 
+    x1_min, x1_max = plt.xlim()
+    x1_sample = np.linspace(x1_min, x1_max, num=m, endpoint=True)
+
+    # plot decision boundary, theta' * x = 0 and provide legend
+    if theta[2] == 0:
+        if theta[1] == 0:
+            # both coefficients are zero
+            print("Warning: Hypothesis cannot be plotted. Feature coefficients (parameters) are both zero.")
+        else:
+            # theta[2] = 0, hence, hypothesis is a vertical line (vline)
+            hypothesis = plt.axvline(x=(-theta[0] / theta[1]), label="Decision boundary, $\Theta^T$$x = 0$")
     else:
-        output_0_x1.append(X[i, 1])
-        output_0_x2.append(X[i, 2])
+        # theta[2] is not equal to zero, hence, x2 = (- theta[0] - theta[1] * x1) / theta[2]
+        # plot hypothesis using sampled points
+        hypothesis, = plt.plot(x1_sample, (-theta[0] -theta[1] * x1_sample) / theta[2], label="Decision boundary, $\Theta^T$$x = 0$")
 
-# Figure 1: plot training data (normalized) with label, 0 (triangle) and 1 (square)
-plt.figure(1)
-plt.title("Logistic Regression Model")
-# plot points that have target value 0
-output_0 = plt.scatter(output_0_x1, output_0_x2, marker="^", color="red")
-# plot points that have target value 1
-output_1 = plt.scatter(output_1_x1, output_1_x2, marker="s", color="green")
+    # label axes
+    plt.xlabel("$x_1$ ($\mu$=" + str(X_mean[0]) + " and $\sigma$=" + str(round(X_std[0], 6)) + ")")
+    plt.ylabel("$x_2$ ($\mu$=" + str(X_mean[1]) + " and $\sigma$=" + str(round(X_std[1], 6)) + ")")
+    # display legend
+    plt.legend()
+    # save figure
+    plt.savefig("q3plot.jpg")
 
-# get limits of x-axis (x1), and sample m input points (x1_sample) 
-x1_min, x1_max = plt.xlim()
-x1_sample = np.linspace(x1_min, x1_max, num=m, endpoint=True)
 
-# plot decision boundary, theta' * x = 0 and provide legend
-if theta[2] == 0:
-    if theta[1] == 0:
-        # both coefficients are zero
-        print("Warning: Hypothesis cannot be plotted. Feature coefficients (parameters) are both zero.")
-        plt.legend([output_0, output_1], ['Target Value = 0', 'Target Value = 1'])
-    else:
-        # theta[2] = 0, hence, hypothesis is a vertical line (vline)
-        hypothesis = plt.axvline(x=(-theta[0] / theta[1]))
-        plt.legend([output_0, output_1, hypothesis], ['Target Value = 0', 'Target Value = 1', 'Decision boundary, $\Theta^T$$x = 0$'])
-else:
-    # theta[2] is not equal to zero, hence, x2 = (- theta[0] - theta[1] * x1) / theta[2]
-    # plot hypothesis using sampled points
-    hypothesis, = plt.plot(x1_sample, (-theta[0] -theta[1] * x1_sample) / theta[2])
-    plt.legend([output_0, output_1, hypothesis], ['Target Value = 0', 'Target Value = 1', 'Decision boundary, $\Theta^T$$x = 0$'])
-
-print(X_mean)
-
-# label axes
-plt.xlabel("$x_1$ (normalized, mean=" + str(X_mean[0]) + " and std=" + str(round(X_std[0], 5)) + ")")
-plt.ylabel("$x_2$ (normalized, mean=" + str(X_mean[1]) + " and std=" + str(round(X_std[1], 5)) + ")")
-
-# show plot
-plt.show()
+# run main
+main()
