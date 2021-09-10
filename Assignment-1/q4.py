@@ -111,9 +111,9 @@ def main():
     gdaY = sys.argv[2]
 
     # train GDA model
-    phi, mu_1, mu_0, sigma_1, sigma_0, sigma, X, X_mean, X_std, m, Y  = gaussian_discriminant_analysis(gdaX, gdaY)
-    # check for errors
-    if mu_1.size == 0:
+    try:
+        phi, mu_1, mu_0, sigma_1, sigma_0, sigma, X, X_mean, X_std, m, Y  = gaussian_discriminant_analysis(gdaX, gdaY)
+    except:
         return
 
     # print paramters
@@ -302,7 +302,6 @@ def main():
     plt.legend()
     # save plot
     plt.savefig("q4plot2.jpg")
-
 
 
 # run main

@@ -112,13 +112,13 @@ def main():
         print("Warning: Extra command line arguments are provided. Three arguments are expected!")
     
     # store file names containing input and output values respectively
-    linearX = sys.argv[1]
-    linearY = sys.argv[2]
+    logisticX = sys.argv[1]
+    logisticY = sys.argv[2]
 
     # train logisitic regression model
-    theta, X, X_mean, X_std, Y, m = logistic_regression(linearX, linearY)
-    # check for errors
-    if theta.size == None:
+    try:
+        theta, X, X_mean, X_std, Y, m = logistic_regression(logisticX, logisticY)
+    except:
         return
 
     # print theta
