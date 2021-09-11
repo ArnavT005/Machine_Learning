@@ -137,14 +137,8 @@ def main():
     if len(sys.argv) < 3:
         print("Error: Insufficient number of arguments are provided. Program terminating!")
         return
-    if len(sys.argv) > 4:
-        print("Warning: Extra command line arguments are provided. Three arguments are expected!")
-    
-    # check if additional plotting needs to be done
-    extra_computation = False
     if len(sys.argv) > 3:
-        if sys.argv[3] == "1":
-            extra_computation = True
+        print("Warning: Extra command line arguments are provided. Three arguments are expected!")
 
     # store file names containing input and output values respectively
     linearX = sys.argv[1]
@@ -270,14 +264,15 @@ def main():
     anim = animation.FuncAnimation(fig, animate2D, frames=num_points, fargs=(theta_0, theta_1, line), interval=200, blit=False) 
     anim.save("q1contour2D.gif", writer=pillow_writer)
 
-    # check if there are extra computations that need to be done
-    if extra_computation:
-        # make contour plots for learning rate = 0.1
-        eta, epsilon = 0.1, 1e-20
 
-        # train linear regression model
+    # make contour plots for learning rate = 0.1, 0.025 and 0.001
+    epsilon = 0.1, 1e-20
+    eta = [0.1, 0.025, 0.001]
+
+    for i in range(0, 3):
+        # train linear regression model using learning rate eta[i]
         try:
-            theta, X, X_mean, X_std, Y, m, theta_0, theta_1, J_val, J = linear_regression(linearX, linearY, eta, epsilon)
+            theta, X, X_mean, X_std, Y, m, theta_0, theta_1, J_val, J = linear_regression(linearX, linearY, eta[i], epsilon)
         except:
             return
 
@@ -291,18 +286,18 @@ def main():
         theta_1 = np.array(theta_1).reshape((1, num_points))
         J_val = np.array(J_val).reshape((1, num_points))
 
-        # Figure 4: Draw a 2D-plot showing contours of loss function J as a function of theta and animate trajectory of gradient descent (eta = 0.1)
-        fig = plt.figure(4, figsize=(10, 10))
+        # Figure: Draw a 2D-plot showing contours of loss function J as a function of theta and animate trajectory of gradient descent
+        fig = plt.figure(i + 4, figsize=(10, 10))
         ax = fig.add_subplot()
         # set title
-        ax.set_title('Loss Function (MSE) Contours (in $\Theta$ plane)')
+        ax.set_title('Loss Function (MSE) Contours (in $\Theta$ plane, $\eta =$' + ' ' + str(eta[i]) + ')')
         
         # plot loss contour
         ax.contour(theta_x, theta_y, cost_z, 100, cmap = 'jet')
 
         # mark start and end points
-        ax.scatter(theta_0[0, 0], theta_1[0, 0], marker="*", color="blue", label="START of GD", s=50)
-        ax.scatter(theta_0[0, num_points - 1], theta_1[0, num_points - 1], marker="*", color="green", label="END of GD", s=50)
+        ax.scatter(theta_0[0, 0], theta_1[0, 0], marker="*", color="blue", label="START of GD", s=80)
+        ax.scatter(theta_0[0, num_points - 1], theta_1[0, num_points - 1], marker="*", color="green", label="END of GD", s=80)
 
         # plot line (trajectory of gradient descent)
         line, = ax.plot(theta_0[0, :], theta_1[0, :], "--r", label = "Gradient Descent Trajectory", marker="o")
@@ -315,109 +310,12 @@ def main():
         # show legend
         ax.legend()
         # save figure
-        plt.savefig("q1contour2D1.jpg")
+        plt.savefig("q1contour2D" + str(i + 1) + ".jpg")
 
         # do animation, put delay of 0.2 seconds
         anim = animation.FuncAnimation(fig, animate2D, frames=num_points, fargs=(theta_0, theta_1, line), interval=200, blit=False) 
-        anim.save("q1contour2D1.gif", writer=pillow_writer)
-
-        # make contour plot for learning rate = 0.025
-        eta, epsilon = 0.025, 1e-20
-
-        # train linear regression model
-        try:
-            theta, X, X_mean, X_std, Y, m, theta_0, theta_1, J_val, J = linear_regression(linearX, linearY, eta, epsilon)
-        except:
-            return
-
-        # store number of Loss-Theta pairs available
-        num_points = len(theta_0) 
-        print("Number of iterations: " + str(num_points - 1))
-        print("Learnt Parameter: " + str(theta))
-
-        # convert iteration data into numpy arrays (row vectors)
-        theta_0 = np.array(theta_0).reshape((1, num_points))
-        theta_1 = np.array(theta_1).reshape((1, num_points))
-        J_val = np.array(J_val).reshape((1, num_points))
-
-        # Figure 5: Draw a 2D-plot showing contours of loss function J as a function of theta and animate trajectory of gradient descent (eta = 0.025)
-        fig = plt.figure(5, figsize=(10, 10))
-        ax = fig.add_subplot()
-        # set title
-        ax.set_title('Loss Function (MSE) Contours (in $\Theta$ plane)')
-        
-        # plot loss contour
-        ax.contour(theta_x, theta_y, cost_z, 100, cmap = 'jet')
-
-        # mark start and end points
-        ax.scatter(theta_0[0, 0], theta_1[0, 0], marker="*", color="blue", label="START of GD", s=50)
-        ax.scatter(theta_0[0, num_points - 1], theta_1[0, num_points - 1], marker="*", color="green", label="END of GD", s=50)
-
-        # plot line (trajectory of gradient descent)
-        line, = ax.plot(theta_0[0, :], theta_1[0, :], "--r", label = "Gradient Descent Trajectory", marker="o")
-        line.set_markersize(5)
-
-        # set axes labels
-        ax.set_xlabel("$\Theta_0$")
-        ax.set_ylabel("$\Theta_1$")
-
-        # show legend
-        ax.legend()
-        # save figure
-        plt.savefig("q1contour2D25.jpg")
-
-        # do animation, put delay of 0.2 seconds
-        anim = animation.FuncAnimation(fig, animate2D, frames=num_points, fargs=(theta_0, theta_1, line), interval=200, blit=False) 
-        anim.save("q1contour2D25.gif", writer=pillow_writer)
-
-        # make contour plot for learning rate = 0.001
-        eta, epsilon = 0.001, 1e-20
-
-        # train linear regression model
-        try:
-            theta, X, X_mean, X_std, Y, m, theta_0, theta_1, J_val, J = linear_regression(linearX, linearY, eta, epsilon)
-        except:
-            return
-
-        # store number of Loss-Theta pairs available
-        num_points = len(theta_0) 
-        print("Number of iterations: " + str(num_points - 1))
-        print("Learnt Parameter: " + str(theta))
-
-        # convert iteration data into numpy arrays (row vectors)
-        theta_0 = np.array(theta_0).reshape((1, num_points))
-        theta_1 = np.array(theta_1).reshape((1, num_points))
-        J_val = np.array(J_val).reshape((1, num_points))
-
-        # Figure 6: Draw a 2D-plot showing contours of loss function J as a function of theta and animate trajectory of gradient descent (eta = 0.001)
-        fig = plt.figure(6, figsize=(10, 10))
-        ax = fig.add_subplot()
-        # set title
-        ax.set_title('Loss Function (MSE) Contours (in $\Theta$ plane)')
-        
-        # plot loss contour
-        ax.contour(theta_x, theta_y, cost_z, 10, cmap = 'jet')
-
-        # mark start and end points
-        ax.scatter(theta_0[0, 0], theta_1[0, 0], marker="*", color="blue", label="START of GD", s=50)
-        ax.scatter(theta_0[0, num_points - 1], theta_1[0, num_points - 1], marker="*", color="green", label="END of GD", s=50)
-
-        # plot line (trajectory of gradient descent)
-        line, = ax.plot(theta_0[0, :], theta_1[0, :], "--r", label = "Gradient Descent Trajectory", marker="o")
-        line.set_markersize(5)
-
-        # set axes labels
-        ax.set_xlabel("$\Theta_0$")
-        ax.set_ylabel("$\Theta_1$")
-
-        # show legend
-        ax.legend()
-        # save figure
-        plt.savefig("q1contour2D01.jpg")
-
-        # do animation, put delay of 0.2 seconds
-        anim = animation.FuncAnimation(fig, animate2D, frames=num_points, fargs=(theta_0, theta_1, line), interval=200, blit=False) 
-        anim.save("q1contour2D01.gif", writer=pillow_writer)
+        # show animation
+        plt.show()
 
 
 #run main

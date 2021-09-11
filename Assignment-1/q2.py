@@ -3,12 +3,17 @@ from matplotlib import animation
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import time
 import math
+import sys
 
-# animation function
-def animate(num, line, theta_0, theta_1, theta_2):
+# animation function, used to animate stochastic gradient descent trajectory (3D)
+# num is the frame number, theta_0, theta_1 and theta_2 are the parameter values at each step of descent
+# line is the line3D object that will be displayed in the plot (3D)
+def animate3D(num, line, theta_0, theta_1, theta_2):
     # increase line's data set
     line.set_data(theta_0[0, :num], theta_1[0, :num])
+    # set z line data
     line.set_3d_properties(theta_2[0, :num])
     # return line
     return line
@@ -40,11 +45,11 @@ def sampling(theta, N):
     # data sampled, return sampled data; Training Set = (X, Y)
     return (X, Y)
 
-
 # function to train a linear regression model using Stochastic Gradient Descent (Mini-Batch) for optimisation
 # sampled input-output data is provided to this function as Numpy arrays X and Y respectively
-# Batch size to be used for mini-batch gradient descent is provided as batch_size parameter
-def linear_regression_sgd(X, Y, batch_size):
+# batch size to be used for mini-batch gradient descent is provided as batch_size parameter
+# corresponding learning rate, convergence threshold and convergence criteria is provided as eta, epsilon and avg_over respectively
+def linear_regression_sgd(X, Y, batch_size, eta, epsilon, avg_over):
 
     # store number of training examples (m) and number of input features per example + 1 (n_ = n + 1, as one additional feature is appended)
     m, n_ = X.shape
@@ -57,8 +62,7 @@ def linear_regression_sgd(X, Y, batch_size):
     # initialize weight parameter (theta) with 0 vector (dimension=(n + 1 = n_))
     theta = np.zeros((n_, 1))
     
-    # set learning rate (0.001) and convergence threshold and flag
-    eta, epsilon = 0.001, 0.0001
+    # set convergence flag
     converged = False
 
     # initialise iteration number and number of mini-batches per epoch 
@@ -66,9 +70,9 @@ def linear_regression_sgd(X, Y, batch_size):
     iteration_number = 0
     num_batch = (m // batch_size)
 
-    # average cost over past 1000-2000 iterations (J_old), and average cost over past 0-1000 iterations (J_new)
-    # set J_old to negative infinity for base case
-    J_old = float('-inf')
+    # average cost over past (avg_over)-(2*avg_over) iterations (J_old), and average cost over past 0-(avg_over) iterations (J_new)
+    # set J_old to current cost/loss = (1 / (2*m)) * (X @ theta - Y)' @ (X @ theta - Y), ' denotes transpose
+    J_old = (1 / (2 * m)) * (X @ theta - Y).T @ (X @ theta - Y)
     J_new = 0
 
     # collect theta_0, theta_1 and theta_2 parameters for plotting
@@ -76,14 +80,16 @@ def linear_regression_sgd(X, Y, batch_size):
     theta_1 = [0]
     theta_2 = [0]
 
+    # start timer
+    start = time.time()
+
+    # randomly shuffle the training set
+    np.random.shuffle(Training_Set)
+
     # SGD loop (repeat until convergence)
     # every iteration of while loop is going to correspond to a single epoch
     # declare convergence when average cost over 1000 iterations will differ by less than epsilon
-    # randomly shuffle the training set
-    # np.random.shuffle(Training_Set)
-    while True:
-        # randomly shuffle the training set
-        np.random.shuffle(Training_Set)
+    while not converged:
         
         # do mini-batch  gradient descent
         for i in range(0, num_batch):
@@ -110,10 +116,10 @@ def linear_regression_sgd(X, Y, batch_size):
             # ' denotes transpose, add this cost to J_new
             J_new = J_new + (1 / (2 * batch_size)) * (X_input @ theta - Y_output).T @ (X_input @ theta - Y_output)
 
-            # check convergence every 1000 iterations
-            if iteration_number % 1000 == 0:
-                # determine average cost over last 1000 iterations
-                J_new = J_new / 1000
+            # check convergence every avg_over iterations
+            if iteration_number % avg_over == 0:
+                # determine average cost over last avg_over iterations
+                J_new = J_new / avg_over
                 # check convergence
                 if abs(J_new - J_old) < epsilon:
                     converged = True
@@ -122,16 +128,14 @@ def linear_regression_sgd(X, Y, batch_size):
                 J_old = J_new
                 J_new = 0
 
-        # check if the average cost function has converged
-        if converged:
-            break
     # convergence achieved, parameter is optimized
+    # end timer
+    end = time.time()
 
     # STOCHASTIC GRADIENT DESCENT ENDS
 
-    # return optimized parameter and theta_0, theta_1, theta_2 parameters (for plotting)
-    return theta, theta_0, theta_1, theta_2
-
+    # return optimized parameter and theta_0, theta_1, theta_2 parameters (for plotting), and time it took to achieve convergence
+    return theta, theta_0, theta_1, theta_2, (end - start)
 
 # function used to test learnt parameters (param) on unseen data (present in filename "file")
 # theta is the original parameter from which the data was sampled, will be used for error comparison
@@ -164,54 +168,98 @@ def test_param(file, param, theta):
     print("Test Error for original parameters: " + str(J_test_og[0, 0]) + " units.")
     
     # find and report difference
-    if J_test_og >= J_test_sgd:
-        print("Learnt Parameters fit the test data better than Original Parameters.")
+    if J_test_og[0, 0] >= J_test_sgd[0, 0]:
         print("J_test_og - J_test_sgd = " + str(J_test_og[0, 0] - J_test_sgd[0, 0]))
     else:
-        print("Original Parameters fit the test data better than Learnt Parameters.")
         print("J_test_sgd - J_test_og = " + str(J_test_sgd[0, 0] - J_test_og[0, 0]))
 
-linearX = "linearX.csv"
-linearY = "linearY.csv"
-theta = np.array([[3], [1], [2]])
-N = 1000000
-batch_size = 1
-(X, Y) = sampling(theta, N)
-param, theta_0, theta_1, theta_2 = linear_regression_sgd(X, Y, batch_size)
-print(param)
-test_param("q2test.csv", param, theta)
+# driver function, parses command line arguments, invokes other methods and plots graph
+def main():
+    # parse command line arguments
+    if len(sys.argv) < 2:
+        print("Error: Insufficient number of arguments are provided. Program terminating!")
+        return
+    if len(sys.argv) > 2:
+        print("Warning: Extra command line arguments are provided. Three arguments are expected!")
 
-# Figure 1: Movement of theta parameter in space (theta_0(x), theta_1(y), theta_2(z))
-fig = plt.figure(1)
-ax = fig.add_subplot(projection="3d")
-# set title
-ax.set_title("Movement of $\Theta$ with each update")
+    # store file names containing test data
+    file = sys.argv[1]
 
-# number of points to plot
-num_points = len(theta_0)
+    # set theta which is to be used for sampling
+    theta = np.array([[3], [1], [2]])
 
-# convert theta_0, theta_1 and theta_2 into numpy arrays
-theta_0 = np.array(theta_0).reshape((1, num_points))
-theta_1 = np.array(theta_1).reshape((1, num_points))
-theta_2 = np.array(theta_2).reshape((1, num_points))
+    # sample 1000000 points using theta (parameters and noise follow normal distributions as specified in the assignment)
+    X, Y = sampling(theta, 1000000)
 
-# plot line
-line, = ax.plot(theta_0[0, :], theta_1[0, :], theta_2[0, :], "-r", label="$\Theta = (\Theta_0, \Theta_1, \Theta_2)$")
+    # determine analytical solution for verification and analysis
+    param_analytical = np.linalg.inv(X.T @ X) @ X.T @ Y
 
-# mark start and end points
-ax.scatter(theta_0[0, 0], theta_1[0, 0], theta_2[0, 0], marker="*", color="blue", label="START of SGD", s=50)
-ax.scatter(theta_0[0, num_points - 1], theta_1[0, num_points - 1], theta_2[0, num_points - 1], marker="*", color="green", label="END of SGD", s=50)
+    print("Optimal Parameter (analytical):")
+    print(param_analytical)
 
-# do animation
-#animation = animation.FuncAnimation(fig, animate, frames=num_points, fargs=(line, theta_0, theta_1, theta_2), interval=1, blit=False)
+    # all batch_sizes to try out
+    batch_size = [1, 100, 10000, 1000000]
+    # learning rates to be used for each batch size (fixed according to assignment)
+    eta = 0.001 
+    # convergence threshold to be used for each size (to be kept fixed according to assignment)
+    epsilon = 1e-5
+    # convergence criteria, "average-over" for each batch size
+    avg_over = [1000000, 10000, 100, 1]
 
-# set axes label
-ax.set_xlabel("$\Theta_0$")
-ax.set_ylabel("$\Theta_1$")
-ax.set_zlabel("$\Theta_2$")
+    # learn models for each batch size
+    for i in range(0, 4):
 
-# show legend
-plt.legend()
+        # train linear regression model using SGD
+        try:
+            param, theta_0, theta_1, theta_2, conv_time = linear_regression_sgd(X, Y, batch_size[i], eta, epsilon, avg_over[i])
+        except:
+            continue
 
-# show plot
-plt.show()
+        # print parameter learnt
+        print("Learnt parameter for batch size: " + str(batch_size[i]))
+        print(param)
+
+        # store number of parameter updates available
+        num_points = len(theta_0) 
+        print("Number of iterations: " + str(num_points - 1))
+        print("Time it took for convergence: " + str(conv_time) + " seconds")
+
+        # compare learnt parameter (param) on test data with original parameter (theta)
+        test_param(file, param, theta)
+
+        # Figure: Movement of theta parameter in space (theta_0(x), theta_1(y), theta_2(z))
+        fig = plt.figure(i)
+        ax = fig.add_subplot(projection="3d")
+        # set title
+        ax.set_title("Movement of $\Theta$ with each update (r = " + str(batch_size[i]) + ")")
+
+        # convert theta_0, theta_1 and theta_2 into numpy arrays
+        theta_0 = np.array(theta_0).reshape((1, num_points))
+        theta_1 = np.array(theta_1).reshape((1, num_points))
+        theta_2 = np.array(theta_2).reshape((1, num_points))
+
+        # plot line
+        line, = ax.plot(theta_0[0, :], theta_1[0, :], theta_2[0, :], "-r", label="$\Theta = (\Theta_0, \Theta_1, \Theta_2)$")
+
+        # mark start and end points
+        ax.scatter(theta_0[0, 0], theta_1[0, 0], theta_2[0, 0], marker="*", color="blue", label="START of SGD", s=80)
+        ax.scatter(theta_0[0, num_points - 1], theta_1[0, num_points - 1], theta_2[0, num_points - 1], marker="*", color="green", label="END of SGD", s=80)
+
+        # set axes label
+        ax.set_xlabel("$\Theta_0$")
+        ax.set_ylabel("$\Theta_1$")
+        ax.set_zlabel("$\Theta_2$")
+
+        # display legend
+        plt.legend()
+        # save plot
+        plt.savefig("q2" + str(batch_size[i]) + ".jpg")
+
+        # do animation
+        anim = animation.FuncAnimation(fig, animate3D, frames=num_points, fargs=(line, theta_0, theta_1, theta_2), blit=False)
+        # show animation
+        plt.show()
+
+
+# run driver
+main()
