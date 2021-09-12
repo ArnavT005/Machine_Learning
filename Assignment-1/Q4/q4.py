@@ -69,7 +69,7 @@ def gaussian_discriminant_analysis(gdaX, gdaY):
     # determine phi parameter = num_1 / m
     phi = num_1 / m
 
-    # determine mean vectors, mu_0 and mu_1, using formulae derived in class
+    # determine mean vectors, mu_0 and mu_1, using formulae derived in class (these will be same for both models)
     # mu_1 = X' @ Y / num_1 and mu_2 = X' @ (1 - Y) / num_0, ' denotes transpose
     mu_1 = (X.T @ Y) / num_1
     mu_0 = (X.T @ (1 - Y)) / num_0
@@ -131,7 +131,7 @@ def main():
     output_1_x1 = []
     output_1_x2 = []
     for i in range(0, m):
-        if Y[i] == 1:
+        if Y[i, 0] == 1:
             output_1_x1.append(X[i, 0])
             output_1_x2.append(X[i, 1])
         else:
@@ -142,9 +142,9 @@ def main():
     fig = plt.figure(1)
 
     # plot points that have target value 0 (Canada, triangle)
-    plt.scatter(output_0_x1, output_0_x2, marker="^", color="red", label="Canada ($P(y = 1|x:\Theta) \leq 0.5$)")
+    plt.scatter(output_0_x1, output_0_x2, marker="^", color="red", label="Canada (Target Value=0)")
     # plot points that have target value 1 (Alaska, square)
-    plt.scatter(output_1_x1, output_1_x2, marker="s", color="green", label="Alaska ($P(y = 1|x:\Theta) > 0.5$)")
+    plt.scatter(output_1_x1, output_1_x2, marker="s", color="green", label="Alaska (Target Value=1)")
 
     # determine limits of x1 and x2 and sample m points in the given range
     x1_min, x1_max = plt.xlim()
@@ -152,28 +152,28 @@ def main():
     x2_min, x2_max = plt.ylim()
     x2_sample = np.linspace(x2_min, x2_max, num=m, endpoint=True)
 
-    # plot the linear decision boundary, a_*x1 + b_*x2 + C_ = 0 
+    # plot the linear decision boundary, a_*x1 + b_*x2 + C_ = 0, refer report for equation of boundary 
 
     # determine inverse of covariance-matrix
     sigma_inv = np.linalg.inv(sigma)
     # determine coefficient of x = (mu_1 - mu_0)' @ sigma_inv, ' denotes transpose
     coefficient = (mu_1 - mu_0).T @ sigma_inv
-    # determine "a" and "b"
+    # determine "a_" and "b_"
     a_ = coefficient[0, 0]
     b_ = coefficient[0, 1]
-    # determine constant term, C = ((mu_0' @ sigma_inv @ mu_0) - (mu_1' @ sigma_inv @ mu_1)) / 2 + log(phi/(1 - phi))
+    # determine constant term, C_ = ((mu_0' @ sigma_inv @ mu_0) - (mu_1' @ sigma_inv @ mu_1)) / 2 + log(phi/(1 - phi))
     C_ = (mu_0.T @ sigma_inv @ mu_0 - mu_1.T @ sigma_inv @ mu_1) / 2 + math.log(phi / (1 - phi))
 
-    # plot decision boundary, a*x1 + b*x2 + C = 0
+    # plot decision boundary, a_*x1 + b_*x2 + C_ = 0
     if b_ == 0:
         if a_ == 0:
             print("Warning: Hypothesis cannot be plotted. Feature coefficients (parameters) are both zero.")
         else:
-            hypothesis = plt.axvline(x=(-C_ / a_), label="Linear boundary, $P(y = 1|x:\Theta) = 0.5$")
+            hypothesis = plt.axvline(x=(-C_ / a_), label="Linear boundary, $P(y = 1|x;\Theta) = 0.5$")
     else:
-        hypothesis = plt.plot(x1_sample, (-C_[0, 0] - a_ * x1_sample) / b_, label="Linear boundary, $P(y = 1|x:\Theta) = 0.5$")
+        hypothesis = plt.plot(x1_sample, (-C_[0, 0] - a_ * x1_sample) / b_, label="Linear boundary, $P(y = 1|x;\Theta) = 0.5$")
 
-    # plot the quadratic decision boundary, a*x1^2 + b*x1*x2 + c*x2^2 + d*x1 + e*x2 = C 
+    # plot the quadratic decision boundary, a*x1^2 + b*x1*x2 + c*x2^2 + d*x1 + e*x2 = C, refer report for equation of boundary 
 
     # determine inverse of covariance-matrices
     sigma_1_inv = np.linalg.inv(sigma_1)
@@ -213,7 +213,7 @@ def main():
         x1_sample = x1_sample[predicate]
         # get output, -ve boundary
         x2 = (- (b * x1_sample + e) - np.sqrt((b * x1_sample + e) ** 2 - 4 * c * (a * (x1_sample ** 2) + d * x1_sample - C[0, 0]))) / (2 * c)
-        hypothesis = plt.plot(x1_sample, x2, "-y", label="Quadratic boundary, $P(y = 1|x:\Theta) = 0.5$")
+        hypothesis = plt.plot(x1_sample, x2, "-y", label="Quadratic boundary, $P(y = 1|x;\Theta) = 0.5$")
         # get output, +ve boundary
         x2 = (- (b * x1_sample + e) + np.sqrt((b * x1_sample + e) ** 2 - 4 * c * (a * (x1_sample ** 2) + d * x1_sample - C[0, 0]))) / (2 * c)
         plt.plot(x1_sample, x2, "-y")
@@ -227,11 +227,11 @@ def main():
                 predicate.append(True)
             else:
                 predicate.append(False)
-        # filter x1_sample
+        # filter x2_sample
         x2_sample = x2_sample[predicate]
         # get output, -ve boundary
         x1 = (- (b * x2_sample + d) - np.sqrt((d + b * x2_sample) ** 2 - 4 * a * (e * x2_sample - C[0, 0]))) / (2 * a)
-        hypothesis = plt.plot(x1, x2_sample, "-y", label="Quadratic boundary, $P(y = 1|x:\Theta) = 0.5$")
+        hypothesis = plt.plot(x1, x2_sample, "-y", label="Quadratic boundary, $P(y = 1|x;\Theta) = 0.5$")
         # get output, +ve boundary
         x1 = (- (b * x2_sample + d) + np.sqrt((d + b * x2_sample) ** 2 - 4 * a * (e * x2_sample - C[0, 0]))) / (2 * a)
         plt.plot(x1, x2_sample, "-y")
@@ -241,14 +241,14 @@ def main():
         # filter out that value of x1 that leads to discontinuity using predicate
         predicate = []
         for x1 in x1_sample:
-            if b * x1 + e < 0.0000000001:
+            if b * x1 + e < 1e-10:
                 predicate.append(False)
             else:
                 predicate.append(True)
         # filter x1_sample
         x1_sample = x1_sample[predicate]
         x2 = (C[0, 0] - d * x1_sample) / (e + b * x1_sample)
-        hypothesis = plt.plot(x1_sample, x2, label="Quadratic boundary, $P(y = 1|x:\Theta) = 0.5$")
+        hypothesis = plt.plot(x1_sample, x2, label="Quadratic boundary, $P(y = 1|x;\Theta) = 0.5$")
 
     # label axes
     plt.xlabel("Ring diameter (Fresh water, $\mu$=" + str(X_mean[0]) + ", $\sigma$=" + str(round(X_std[0], 5)) + ")")
@@ -263,19 +263,19 @@ def main():
     fig = plt.figure(2)
 
     # plot points that have target value 0 (Canada, triangle)
-    plt.scatter(output_0_x1, output_0_x2, marker="^", color="red", label="Canada ($P(y = 1|x:\Theta) \leq 0.5$)")
+    plt.scatter(output_0_x1, output_0_x2, marker="^", color="red", label="Canada (Target Value=0)")
     # plot points that have target value 1 (Alaska, square)
-    plt.scatter(output_1_x1, output_1_x2, marker="s", color="green", label="Alaska ($P(y = 1|x:\Theta) > 0.5$)")
+    plt.scatter(output_1_x1, output_1_x2, marker="s", color="green", label="Alaska (Target Value=1)")
 
-    # plot the linear decision boundary, a*x1 + b*x2 + C = 0
+    # plot the linear decision boundary, a_*x1 + b_*x2 + C_ = 0
     # plot decision boundary, a*x1 + b*x2 + C = 0
     if b_ == 0:
         if a_ == 0:
             print("Warning: Hypothesis cannot be plotted. Feature coefficients (parameters) are both zero.")
         else:
-            hypothesis = plt.axvline(x=(-C_ / a_), label="Linear boundary, $P(y = 1|x:\Theta) = 0.5$")
+            hypothesis = plt.axvline(x=(-C_ / a_), label="Linear boundary, $P(y = 1|x;\Theta) = 0.5$")
     else:
-        hypothesis = plt.plot(x1_sample, (-C_[0, 0] - a_ * x1_sample) / b_, label="Linear boundary, $P(y = 1|x:\Theta) = 0.5$")
+        hypothesis = plt.plot(x1_sample, (-C_[0, 0] - a_ * x1_sample) / b_, label="Linear boundary, $P(y = 1|x;\Theta) = 0.5$")
 
     # plot the quadratic decision boundary, a*x1^2 + b*x1*x2 + c*x2^2 + d*x1 + e*x2 = C 
     # plot decision boundary, a*x1^2 + b*x1*x2 + c*x2^2 + d*x1 + e*x2 = C 
@@ -283,16 +283,16 @@ def main():
         # use quadratic formula for plotting, c*x2^2 + b*x1*x2 + e*x2 + a*x1^2 + d*x1 = C
         # get output, -ve boundary
         x2 = (- (b * x1_sample + e) - np.sqrt((b * x1_sample + e) ** 2 - 4 * c * (a * (x1_sample ** 2) + d * x1_sample - C[0, 0]))) / (2 * c)
-        hypothesis = plt.plot(x1_sample, x2, "-y", label="Quadratic boundary, $P(y = 1|x:\Theta) = 0.5$")
+        hypothesis = plt.plot(x1_sample, x2, "-y", label="Quadratic boundary, $P(y = 1|x;\Theta) = 0.5$")
     elif a != 0:
         # use quadratic formula for plotting, a*x1^2 + b*x1*x2 + d*x1 + e*x2 = C
         # get output, +ve boundary
         x1 = (- (b * x2_sample + d) + np.sqrt((d + b * x2_sample) ** 2 - 4 * a * (e * x2_sample - C[0, 0]))) / (2 * a)
-        plt.plot(x1, x2_sample, "-y")
+        plt.plot(x1, x2_sample, "-y", label="Quadratic boundary, $P(y = 1|x;\Theta) = 0.5$")
     else:
         # both a and c are zero, use relation b*x1*x2 + d*x1 + e*x2 = C for plotting
         x2 = (C[0, 0] - d * x1_sample) / (e + b * x1_sample)
-        hypothesis = plt.plot(x1_sample, x2, label="Quadratic boundary, $P(y = 1|x:\Theta) = 0.5$")
+        hypothesis = plt.plot(x1_sample, x2, label="Quadratic boundary, $P(y = 1|x;\Theta) = 0.5$")
 
     # label axes
     plt.xlabel("Ring diameter (Fresh water, $\mu$=" + str(X_mean[0]) + ", $\sigma$=" + str(round(X_std[0], 5)) + ")")

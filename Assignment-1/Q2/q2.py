@@ -19,7 +19,7 @@ def animate3D(num, line, theta_0, theta_1, theta_2):
     return line
 
 # function used to sample N number of points using theta parameter and noise variance=2
-# x1 and x2 are fixed to follow N(3, 4) and N(-1, 4) distributions respectively
+# x1 and x2 are fixed to follow N(3, 4) and N(-1, 4) distributions respectively (independently)
 def sampling(theta, N):
 
     # x1_sample and x2_sample store the input features for N sampled examples
@@ -88,7 +88,7 @@ def linear_regression_sgd(X, Y, batch_size, eta, epsilon, avg_over):
 
     # SGD loop (repeat until convergence)
     # every iteration of while loop is going to correspond to a single epoch
-    # declare convergence when average cost over 1000 iterations will differ by less than epsilon
+    # declare convergence when average cost over avg_over iterations will differ by less than epsilon
     while not converged:
         
         # do mini-batch  gradient descent
@@ -180,9 +180,9 @@ def main():
         print("Error: Insufficient number of arguments are provided. Program terminating!")
         return
     if len(sys.argv) > 2:
-        print("Warning: Extra command line arguments are provided. Three arguments are expected!")
+        print("Warning: Extra command line arguments are provided. Two arguments are expected!")
 
-    # store file names containing test data
+    # store file name containing test data
     file = sys.argv[1]
 
     # set theta which is to be used for sampling
@@ -203,7 +203,7 @@ def main():
     eta = 0.001 
     # convergence threshold to be used for each size (to be kept fixed according to assignment)
     epsilon = 1e-5
-    # convergence criteria, "average-over" for each batch size
+    # convergence criteria, "average-over" for each batch size (check convergence every epoch)
     avg_over = [1000000, 10000, 100, 1]
 
     # learn models for each batch size

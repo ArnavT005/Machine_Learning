@@ -9,7 +9,6 @@ def sigmoid(matrix):
     # /, + and np.exp do element-wise division, addition and exponentiation respectively
     return (1 / (1 + np.exp(-1 * matrix)))
 
-
 # function to train a logistic regression model
 # input features and target values to be read from "logisticX" and "logisticY" file respectively 
 def logistic_regression(logisticX, logisticY):
@@ -131,7 +130,7 @@ def main():
     output_1_x1 = []
     output_1_x2 = []
     for i in range(0, m):
-        if Y[i] == 1:
+        if Y[i, 0] == 1:
             output_1_x1.append(X[i, 1])
             output_1_x2.append(X[i, 2])
         else:
@@ -161,7 +160,7 @@ def main():
     else:
         # theta[2] is not equal to zero, hence, x2 = (- theta[0] - theta[1] * x1) / theta[2]
         # plot hypothesis using sampled points
-        hypothesis, = plt.plot(x1_sample, (-theta[0] -theta[1] * x1_sample) / theta[2], label="Decision boundary, $\Theta^T$$x = 0$")
+        hypothesis, = plt.plot(x1_sample, (-theta[0] - theta[1] * x1_sample) / theta[2], label="Decision boundary, $\Theta^T$$x = 0$")
 
     # label axes
     plt.xlabel("$x_1$ ($\mu$=" + str(X_mean[0]) + " and $\sigma$=" + str(round(X_std[0], 6)) + ")")

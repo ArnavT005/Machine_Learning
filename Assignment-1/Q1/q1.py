@@ -93,7 +93,7 @@ def linear_regression(linearX, linearY, eta, epsilon):
     theta = np.zeros((n + 1, 1))
 
     # determine initial cost (or MSE)
-    # J = (1 / 2*m) * (X @ theta - Y)' @ (X @ theta - Y), ' denotes transpose
+    # J = (1 / (2*m)) * (X @ theta - Y)' @ (X @ theta - Y), ' denotes transpose
     # .T is used to transpose numpy array and @ is used for matrix multiplication
     J = (1 / (2 * m)) * (X @ theta - Y).T @ (X @ theta - Y)
 
@@ -144,7 +144,7 @@ def main():
     linearX = sys.argv[1]
     linearY = sys.argv[2]
 
-    # set learning rate (eta) and convergence threshold(epsilon)
+    # set learning rate (eta) and convergence threshold (epsilon)
     eta, epsilon = 0.3, 1e-18
 
     # train linear regression model
@@ -190,7 +190,7 @@ def main():
     fig = plt.figure(2, figsize=(10, 10))
     ax = fig.add_subplot(projection="3d")
     # set title
-    ax.set_title('Loss Function (MSE) vs $\Theta$')
+    ax.set_title('Loss Function (MSE) vs $\Theta$ ($\eta = 0.3$)')
     # rotate plot
     ax.view_init(45, -75)
 
@@ -202,8 +202,7 @@ def main():
     # create parameter grid for 3D plot, use step=0.1 (between sampled points)
     theta_x, theta_y = np.meshgrid(np.arange(theta_x_min, theta_x_max + 0.1, 0.1), np.arange(theta_y_min, theta_y_max + 0.1, 0.1))
 
-    # calculate cost values (z-axis) for each value of theta_0 and theta_1 (present on grid)
-    # use expression, J = (1 / (2*m)) * (X @ theta_xy - Y)' @ (X @ theta_xy - Y), ' denotes transpose
+    # calculate cost values (z-axis) for each value in theta_x and theta_y (present on grid)
     cost_z = cost_function(theta_x, theta_y, X, Y, m)
     
     # mark start and end points
@@ -222,6 +221,7 @@ def main():
     ax.set_ylabel("$\Theta_1$")
     ax.set_zlabel("Loss Value (MSE)")
 
+    # set z-axis limit
     ax.set_zlim(0, 1)
 
     # show legend
@@ -238,7 +238,7 @@ def main():
     fig = plt.figure(3, figsize=(10, 10))
     ax = fig.add_subplot()
     # set title
-    ax.set_title('Loss Function (MSE) Contours (in $\Theta$ plane)')
+    ax.set_title('Loss Function (MSE) Contours (in $\Theta$ plane) ($\eta = 0.3$)')
     
     # plot loss contour
     ax.contour(theta_x, theta_y, cost_z, 50, cmap = 'jet')
@@ -313,7 +313,6 @@ def main():
 
         # do animation, put delay of 0.2 seconds
         anim = animation.FuncAnimation(fig, animate2D, frames=num_points, fargs=(theta_0, theta_1, line), interval=200, blit=False) 
-        
         # show animation
         plt.show()
 
