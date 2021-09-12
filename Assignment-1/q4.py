@@ -33,7 +33,7 @@ def gaussian_discriminant_analysis(gdaX, gdaY):
     # normalize data with mean 0 and variance 1
     # row dimension of X_mean and X_std is broadcasted to match the dimension of X_train
     # / and - carry out element-wise division and subtraction respectively
-    X = X_train - X_mean / X_std
+    X = (X_train - X_mean) / X_std
 
     # read "gdaY" (space-separated file)
     df = pd.read_csv(gdaY, sep=' ', header=None)
@@ -71,8 +71,8 @@ def gaussian_discriminant_analysis(gdaX, gdaY):
 
     # determine mean vectors, mu_0 and mu_1, using formulae derived in class
     # mu_1 = X' @ Y / num_1 and mu_2 = X' @ (1 - Y) / num_0, ' denotes transpose
-    mu_1 = X.T @ Y / num_1
-    mu_0 = X.T @ (1 - Y) / num_0
+    mu_1 = (X.T @ Y) / num_1
+    mu_0 = (X.T @ (1 - Y)) / num_0
 
     # determine mean difference matrices (used for determining covariance matrix below)
     # mu_1 difference matrix = X' - mu_1 (broadcasted)

@@ -57,7 +57,7 @@ def logistic_regression(logisticX, logisticY):
     theta = np.zeros((n + 1, 1))
     
     # set convergence threshold
-    epsilon = 1e-4
+    epsilon = 1e-5
 
     # learn parameters (theta) using Newton's method (maximise log likelihood)
     # initial hypothesis function: sigmoid function; @ performs matrix multiplication
