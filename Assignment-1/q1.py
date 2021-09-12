@@ -100,12 +100,12 @@ def linear_regression(linearX, linearY, eta, epsilon):
     # create lists to store parameters (theta) and cost (J); used later for mesh/contour plotting
     theta_0 = [theta[0, 0]]
     theta_1 = [theta[1, 0]]
-    J_val = [J]
+    J_val = [J[0, 0]]
 
     # gradient descent loop (repeat until convergence)
     while True:
         # store pre-update cost for checking convergence post-update
-        temp = J
+        temp = J[0, 0]
         
         # compute batch gradient using expression derived in class: grad = (1 / m) * X' @ (X @ theta - Y), ' denotes transpose
         grad = (1 / m) * X.T @ (X @ theta - Y)
@@ -119,10 +119,10 @@ def linear_regression(linearX, linearY, eta, epsilon):
         # store the parameters and cost, for plotting purposes
         theta_0.append(theta[0, 0])
         theta_1.append(theta[1, 0])
-        J_val.append(J)
-
+        J_val.append(J[0, 0])
+    
         # check for convergence
-        if abs(J - temp) < epsilon:
+        if abs(J[0, 0] - temp) < epsilon:
             break
     # convergence achieved, parameter is optimized
 
@@ -184,7 +184,7 @@ def main():
     plt.savefig("q1plot1.jpg")
 
     # create video writer to save animations
-    pillow_writer = animation.PillowWriter(fps=5)
+    ffmpeg_writer = animation.FFMpegFileWriter(fps=5)
 
     # Figure 2: Draw a 3D-mesh showing loss function J as a function of theta and animate trajectory of gradient descent
     fig = plt.figure(2, figsize=(10, 10))
@@ -231,7 +231,7 @@ def main():
 
     # do animation, put delay of 0.2 seconds
     anim = animation.FuncAnimation(fig, animate3D, frames=num_points, fargs=(theta_0, theta_1, J_val, line), interval=200, blit=False) 
-    anim.save("q1mesh3D.gif", writer=pillow_writer)
+    anim.save("q1mesh3D.gif", writer=ffmpeg_writer)
 
 
     # Figure 3: Draw a 2D-plot showing contours of loss function J as a function of theta and animate trajectory of gradient descent
@@ -262,19 +262,18 @@ def main():
 
     # do animation, put delay of 0.2 seconds
     anim = animation.FuncAnimation(fig, animate2D, frames=num_points, fargs=(theta_0, theta_1, line), interval=200, blit=False) 
-    anim.save("q1contour2D.gif", writer=pillow_writer)
+    anim.save("q1contour2D.gif", writer=ffmpeg_writer)
 
 
     # make contour plots for learning rate = 0.1, 0.025 and 0.001
-    epsilon = 0.1, 1e-20
+    epsilon = 1e-20
     eta = [0.1, 0.025, 0.001]
-
     for i in range(0, 3):
         # train linear regression model using learning rate eta[i]
         try:
             theta, X, X_mean, X_std, Y, m, theta_0, theta_1, J_val, J = linear_regression(linearX, linearY, eta[i], epsilon)
         except:
-            return
+            continue
 
         # store number of Loss-Theta pairs available
         num_points = len(theta_0) 
@@ -314,6 +313,7 @@ def main():
 
         # do animation, put delay of 0.2 seconds
         anim = animation.FuncAnimation(fig, animate2D, frames=num_points, fargs=(theta_0, theta_1, line), interval=200, blit=False) 
+        
         # show animation
         plt.show()
 

@@ -13,7 +13,7 @@ import sys
 def animate3D(num, line, theta_0, theta_1, theta_2):
     # increase line's data set
     line.set_data(theta_0[0, :num], theta_1[0, :num])
-    # set z line data
+    # # set z line data
     line.set_3d_properties(theta_2[0, :num])
     # return line
     return line
@@ -214,7 +214,7 @@ def main():
             param, theta_0, theta_1, theta_2, conv_time = linear_regression_sgd(X, Y, batch_size[i], eta, epsilon, avg_over[i])
         except:
             continue
-
+  
         # print parameter learnt
         print("Learnt parameter for batch size: " + str(batch_size[i]))
         print(param)
@@ -239,7 +239,8 @@ def main():
         theta_2 = np.array(theta_2).reshape((1, num_points))
 
         # plot line
-        line, = ax.plot(theta_0[0, :], theta_1[0, :], theta_2[0, :], "-r", label="$\Theta = (\Theta_0, \Theta_1, \Theta_2)$")
+        line, = ax.plot(theta_0[0, :], theta_1[0, :], theta_2[0, :], "--r", label="$\Theta = (\Theta_0, \Theta_1, \Theta_2)$", marker='o')
+        line.set_markersize(1)
 
         # mark start and end points
         ax.scatter(theta_0[0, 0], theta_1[0, 0], theta_2[0, 0], marker="*", color="blue", label="START of SGD", s=80)
@@ -253,10 +254,10 @@ def main():
         # display legend
         plt.legend()
         # save plot
-        plt.savefig("q2" + str(batch_size[i]) + ".jpg")
+        plt.savefig("q2plot" + str(i + 1) + ".jpg")
 
         # do animation
-        anim = animation.FuncAnimation(fig, animate3D, frames=num_points, fargs=(line, theta_0, theta_1, theta_2), blit=False)
+        anim = animation.FuncAnimation(fig, animate3D, frames=num_points, fargs=(line, theta_0, theta_1, theta_2), interval=200, blit=False)
         # show animation
         plt.show()
 
