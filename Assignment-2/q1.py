@@ -19,24 +19,17 @@ def parse_json(file):
 
 # split input data into words (separated by spaces/punctuations)
 # also create and return vocabulary (V)
-# X is the list of reviewTexts (input data)
+# X is the list of texts (input data)
 def split_input(X):
 	# initialise vocabulary (dictionary)
 	V, size = {}, 0
 	# initialise new input list (to be returned)
-	# for every example, it stores the words and their occurences (key-value pairs)
+	# for every example, it stores the list of words
 	X_ = [[] for i in range(len(X))]
 	# split every input
 	for i in range(len(X)):
 		# split on spaces/punctuations
 		words = nltk.word_tokenize(X[i])
-		# words = [w.lower() for w in X[i].split()]
-		# table = str.maketrans('','', string.punctuation)
-		# X_[i] = [w.translate(table) for w in words]
-		# for word in X_[i]:
-		# 	if not word in V.keys():
-		# 		V[word] = size + 1
-		# 		size += 1
 		# filter punctuations
 		for word in words:
 			# check if word is void of punctuations
@@ -56,6 +49,46 @@ def split_input(X):
 	# return the split data and vocabulary (and size)
 	return X_, V, size
 
+# split input data into words (separated by spaces/punctuations)
+# filter stop words and perform stemming
+# also create and return vocabulary (V)
+# X is the list of texts (input data)
+def split_input_advanced(X):
+	# store stop words (english)
+	stop_words = set(nltk.corpus.stopwords.words('english'))
+	# create stemmer object
+	stemmer = nltk.stem.porter.PorterStemmer()
+	# initialise vocabulary (dictionary)
+	V, size = {}, 0
+	# initialise new input list (to be returned)
+	# for every example, it stores the list of words
+	X_ = [[] for i in range(len(X))]
+	# split every input
+	for i in range(len(X)):
+		# split on spaces/punctuations
+		words = nltk.word_tokenize(X[i])
+		# filter punctuations
+		for word in words:
+			# check if word is void of punctuations
+			# only store alphabetical words (no numerics or alphanumerics)
+			if word.isalpha():
+				# convert word to lower case
+				word = word.lower()
+				# stem word
+				word = stemmer.stem(word)
+				# append word into X_ list (only if it is not a stop word)
+				if not word in stop_words:
+					X_[i].append(word)
+					# add to dictionary (if not present already)
+					if not word in V.keys():
+						V[word] = size + 1
+						size += 1
+	# add unknown token to the dictionary (for unseen data)
+	V['UNKNOWN'] = size + 1
+	size += 1
+	# return the split data and vocabulary (and size)
+	return X_, V, size
+
 # function to train a Naive-Bayes classifier (multinomial)
 # X: input data (list of list of words)
 # Y: target variable (review rating)
@@ -64,44 +97,40 @@ def naive_bayes_train(X, Y, V, size):
 	# number of training examples
 	m = len(Y)
 	# there are five classes in total (5 phi parameters and 5*size theta parameters)
+	# store majority class
+	majority_class = 1
 	# phi[i] = probability that target class is (i + 1) = [count of (i + 1)] / m
 	phi = [0 for i in range(5)]
+	for j in range(m):
+		# count occurence of class Y[j] - 1
+		phi[Y[j] - 1] += 1
+		# check if it is majority class
+		if phi[Y[j] - 1] > phi[majority_class - 1]:
+			majority_class = Y[j]
+	# divide by total count of examples to get class prior
 	for i in range(5):
-		# count occurence of class (i + 1)
-		for j in range(m):
-			if Y[j] == (i + 1):
-				phi[i] += 1
-		# divide by total count of examples to get class prior
 		phi[i] /= m
 	# theta[i][j] = probability of occurence of word (j + 1) given target class (i + 1)
 	# theta[i][j] = (count of word (j + 1) in reviews of class (i + 1) + 1) / (total word count in all reviews of class (i + 1) + |V|)
 	# 1 and |V| have been added for Laplace Smoothing
 	theta = [[1 for j in range(size)] for i in range(5)]
+	# store word count for each class
+	word_count = [0 for i in range(5)]
+	# go through all training data
+	for j in range(m):
+		# increment word count of class Y[j] - 1
+		word_count[Y[j] - 1] += len(X[j])
+		# go through all words in an example
+		for word in X[j]:
+			# determine word index in dictionary
+			word_index = V[word]
+			# add 1 to theta[Y[j] - 1][word_index - 1]
+			theta[Y[j] - 1][word_index - 1] += 1
+	# divide each parameter by total word count in review of that class + |V| (size)
 	for i in range(5):
-		# go through all training data for class (i + 1)
-		# store total word count in class (i + 1)
-		word_count = 0
-		for index in range(m):
-			# skip if the example is of different class
-			if Y[index] != (i + 1):
-				continue
-			# increment word count by number of words in example
-			word_count += len(X[index])
-			# go through all words in an example
-			for word in X[index]:
-				# determine word index in dictionary
-				word_index = V[word]
-				# add 1 to theta[i][word_index-1]
-				theta[i][word_index - 1] += 1
-		# divide each parameter by total word count in reviews of class (i + 1) + |V| (size)
 		for j in range(size):
-			theta[i][j] /= (word_count + size)
+			theta[i][j] /= (word_count[i] + size)
 	# all parameters computed
-	# determine majority class
-	majority_class = 1
-	for i in range(2, 6):
-		if phi[i - 1] > phi[majority_class - 1]:
-			majority_class = i
 	# return these parameters
 	return phi, theta, majority_class
 
@@ -113,17 +142,17 @@ def naive_bayes_train(X, Y, V, size):
 def naive_bayes_test(X, Y, V, size, phi, theta):
 	# number of test examples
 	m = len(Y)
-	# determine base logarithm values for each class
+	# determine base logarithm values for each class (assuming all words are not there in the review)
 	base_log = [0 for i in range(5)]
 	for i in range(5):
 		for j in range(size):
 			base_log[i] += math.log(1 - theta[i][j])
 	# go through every example and make prediction
-	# count accuracy = (correct predictions) / m
+	# count accuracy = (accuracy_count / m) * 100
 	accuracy_count = 0
 	for i in range(m):
 		# convert list to set
-		X[i] = set(X[i])
+		review = set(X[i])
 		# maximise P(x|y=k)P(y=k) over 1 <= k <= 5
 		# equivalent to maximising log(P(x|y=k)) + log(P(y=k))
 		maxValue = 0
@@ -131,16 +160,16 @@ def naive_bayes_test(X, Y, V, size, phi, theta):
 		for k in range(5):
 			# add the prior probability
 			tempValue = math.log(phi[k]) + base_log[k]
-			# go through all words in example (i + 1)
+			# go through all words in example i
 			# check if there is any unseen word in X[i]
 			unknown = False
-			for word in X[i]:
+			for word in review:
 				if word in V.keys():
 					# get word index
 					word_index = V[word]
 					# add to tempValue
 					tempValue += math.log(theta[k][word_index - 1]) - math.log(1 - theta[k][word_index - 1])
-				elif not word in V.keys() and not unknown:
+				elif not unknown:
 					# word is UNKNOWN, add log(P(UNKNOWN=1|y=k))
 					tempValue += math.log(theta[k][size - 1]) - math.log(1 - theta[k][size - 1])
 					unknown = True
@@ -148,7 +177,7 @@ def naive_bayes_test(X, Y, V, size, phi, theta):
 			if maxClass == 0:
 				maxValue = tempValue
 				maxClass = k + 1
-			elif tempValue > maxValue:
+			elif tempValue >= maxValue:
 				maxValue = tempValue
 				maxClass = k + 1
 		# predict class (maxClass)
@@ -168,7 +197,7 @@ def random_test(X, Y):
 	# count accuracy = (correct predictions) / m
 	accuracy_count = 0
 	for i in range(m):
-		prediction = random.choice(range(1, 6))
+		prediction = random.choice([1, 2, 3, 4, 5])
 		if Y[i] == prediction:
 			accuracy_count += 1
 	# return accuracy = (accuracy_count / m) * 100
@@ -182,7 +211,7 @@ def majority_test(X, Y, majority_class):
 	# number of test examples
 	m = len(Y)
 	# go through all examples (predict majority)
-	# count accuracy = (correct predictions) / m
+	# count accuracy = (accuracy_count / m) * 100
 	accuracy_count = 0
 	for i in range(m):
 		if Y[i] == majority_class:
