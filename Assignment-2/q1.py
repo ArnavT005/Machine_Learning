@@ -142,37 +142,27 @@ def naive_bayes_train(X, Y, V, size):
 def naive_bayes_test(X, Y, V, size, phi, theta):
 	# number of test examples
 	m = len(Y)
-	# determine base logarithm values for each class (assuming all words are not there in the review)
-	base_log = [0 for i in range(5)]
-	for i in range(5):
-		for j in range(size):
-			base_log[i] += math.log(1 - theta[i][j])
 	# go through every example and make prediction
 	# count accuracy = (accuracy_count / m) * 100
 	accuracy_count = 0
 	for i in range(m):
-		# convert list to set
-		review = set(X[i])
 		# maximise P(x|y=k)P(y=k) over 1 <= k <= 5
 		# equivalent to maximising log(P(x|y=k)) + log(P(y=k))
 		maxValue = 0
 		maxClass = 0
 		for k in range(5):
 			# add the prior probability
-			tempValue = math.log(phi[k]) + base_log[k]
+			tempValue = math.log(phi[k])
 			# go through all words in example i
-			# check if there is any unseen word in X[i]
-			unknown = False
-			for word in review:
+			for word in X[i]:
 				if word in V.keys():
 					# get word index
 					word_index = V[word]
 					# add to tempValue
-					tempValue += math.log(theta[k][word_index - 1]) - math.log(1 - theta[k][word_index - 1])
-				elif not unknown:
+					tempValue += math.log(theta[k][word_index - 1])
+				else:
 					# word is UNKNOWN, add log(P(UNKNOWN=1|y=k))
-					tempValue += math.log(theta[k][size - 1]) - math.log(1 - theta[k][size - 1])
-					unknown = True
+					tempValue += math.log(theta[k][size - 1])
 			# check if it is the maximum value
 			if maxClass == 0:
 				maxValue = tempValue
@@ -224,7 +214,7 @@ print("Parsing JSON (train)")
 X, Y = parse_json("Music_Review_train.json")
 print("JSON parsed (train)")
 print("Processing text (train)")
-X, V, size = split_input(X)
+X, V, size = split_input_advanced(X)
 print("Text processed (train)")
 print("Vocab Size: " + str(size))
 print("Learning model")
@@ -234,7 +224,7 @@ print("Parsing JSON (test)")
 X, Y = parse_json("Music_Review_test.json")
 print("JSON parsed (test)")
 print("Processing text (test)")
-X, V_, size_ = split_input(X)
+X, V_, size_ = split_input_advanced(X)
 print("Text processed (test)")
 print("Testing Model")
 accuracy = naive_bayes_test(X, Y, V, size, phi, theta)
