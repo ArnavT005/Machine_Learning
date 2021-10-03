@@ -111,7 +111,7 @@ def svm_train_binary_linear_CVXOPT(X, Y, class_num, C):
 	# determining all such b's using all such vectors
 	b = support_vectors_Y - support_vectors_X @ w
 	# return parameters w and b
-	return w, b
+	return support_vectors_indices, support_vectors_alpha, support_vectors_X, support_vectors_Y, w, b
 
 # function to train a (gaussian kernel) SVM binary classifier (using CVXOPT)
 # X: input data (matrix of transposes)
@@ -179,7 +179,7 @@ def svm_train_binary_gaussian_CVXOPT(X, Y, class_num, C, gamma):
 	support_vectors_X = X[support_vectors_indices, :]
 	support_vectors_Y = Y[support_vectors_indices, :]
 	# return support vectors
-	return support_vectors_alpha, support_vectors_X, support_vectors_Y
+	return support_vectors_indices, support_vectors_alpha, support_vectors_X, support_vectors_Y
 
 # function to train a (gaussian kernel) SVM multi-class classifier (using CVXOPT)
 # X: input data (matrix of transposes)
@@ -235,24 +235,33 @@ def svm_test_binary_linear_CVXOPT(X, Y, class1, class2, w, b):
 # Y: target variable (column vector)
 # class1: class number that needs to be treated as -1, other class (class2) will be 1
 # alpha_s, X_s and Y_s are support vectors coefficients, input features and target values respectively
-def svm_test_binary_gaussian_CVXOPT(X, Y, class1, class2, alpha_s, X_s, Y_s):
+# gamma: kernel parameter
+def svm_test_binary_gaussian_CVXOPT(X, Y, class1, class2, alpha_s, X_s, Y_s, gamma):
 	# store the shape of test data
 	m, n = X.shape
 	# store number of support vectors
 	num_vectors = alpha_s.shape[0]
+	# determine overall matrix (all examples)
+	X_total = np.row_stack((X_s, X))
+	# determine kernel matrix of total matrix
+	temp_1 = X_total @ X_total.T
+	temp_2 = np.diag(np.diag(temp_1))
+	temp_3 = np.ones((num_vectors + m, num_vectors + m))
+	temp_4 = temp_2 @ temp_3 + temp_3 @ temp_2
+	kernel = np.exp(-gamma * (temp_4 - 2 * temp_1))
 	# determine intercept term, b = y_s - summation(alpha_j * y_j * K(x_s, x_j)) over j
-	temp = 0
-	for j in range(num_vectors):
-		temp += alpha_s[j][0] * Y_s[j][0] * np.exp(-0.05 * ((X_s[0, :] - X_s[j, :]) @ (X_s[0, :] - X_s[j, :]).T))
+	temp = np.sum(alpha_s * Y_s * kernel[0:num_vectors, 0])
+	# for j in range(num_vectors):
+	# 	temp += alpha_s[j][0] * Y_s[j][0] * np.exp(-0.05 * ((X_s[0, :] - X_s[j, :]) @ (X_s[0, :] - X_s[j, :]).T))
 	b = Y_s[0][0] - temp
 	# initialise accuracy count to 0
 	accuracy_count = 0
 	# go through all examples and make predictions
 	for i in range(m):
 		# determine w.T @ x = summation(alpha_j * y_j * K(x_j, x)) over j
-		temp = 0
-		for j in range(num_vectors):
-			temp += alpha_s[j][0] * Y_s[j][0] * np.exp(-0.05 * ((X[i, :] - X_s[j, :]) @ (X[i, :] - X_s[j, :]).T))
+		temp = np.sum(alpha_s * Y_s * kernel[0:num_vectors, num_vectors + i])
+		# for j in range(num_vectors):
+		# 	temp += alpha_s[j][0] * Y_s[j][0] * np.exp(-0.05 * ((X[i, :] - X_s[j, :]) @ (X[i, :] - X_s[j, :]).T))
 		if temp + b >= 0:
 			# predict class2
 			if Y[i] == class2:
@@ -462,11 +471,11 @@ def cross_validation(K, X_train, Y_train, C, gamma, X_test, Y_test):
 print("Parsing CSV")
 data_set = parse_csv("train.csv")
 print("CSV parsed")
-data_set = filter_data(data_set, 4, 5)
 X, Y = split_data(data_set)
+data_set = filter_data(X, Y, 4, 5)
 
 print("Learning model")
-alpha_s, X_s, Y_s = svm_train_binary_gaussian_CVXOPT(X, Y, 4)
+alpha_s, X_s, Y_s = svm_train_binary_gaussian_CVXOPT(X, Y, 4, 1, 0.05)
 print("Model learnt")
 print("Parsing CSV (test)")
 data_set = parse_csv("test.csv")
@@ -476,5 +485,5 @@ print("Splitting data (test)")
 X, Y = split_data(data_set)
 print("Data split (test)")
 print("Testing model")
-print(svm_test_binary_gaussian_CVXOPT(X, Y, 4, 5, alpha_s, X_s, Y_s))
+print(svm_test_binary_gaussian_CVXOPT(X, Y, 4, 5, alpha_s, X_s, Y_s, 0.05))
 print("Model tested")
