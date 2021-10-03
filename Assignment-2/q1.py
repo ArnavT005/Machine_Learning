@@ -4,6 +4,7 @@ import string
 import random
 import nltk
 import math
+nltk.download('punkt')
 
 # parse review data and generate training/test set
 # parameter file stores the name of the file
