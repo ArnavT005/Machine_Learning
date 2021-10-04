@@ -198,7 +198,7 @@ def svm_train_multi_gaussian_CVXOPT(X, Y, k, C, gamma):
 	for i in range(k):
 		for j in range(i + 1, k):
 			# filter training data and retrieve subset (class = i and j)
-			X_subset, Y_subset = filter_data(X, Y, i, j)
+			X_subset, Y_subset = filter_data(X, Y, [i, j])
 			# train model, store in alpha_s, X_s and Y_s (higher class is set to one)
 			index_s[i][j], alpha_s[i][j], X_s[i][j], Y_s[i][j] = svm_train_binary_gaussian_CVXOPT(X_subset, Y_subset, i, C, gamma)
 			print("Classifier trained: " + str(i) + " vs " + str(j))	
@@ -461,13 +461,13 @@ def cross_validation(K, X_train, Y_train, C, gamma, X_test, Y_test):
 		# cross-validation accuracy and best model
 		accuracy = 0
 		best_model = None
-		for i in range(K):
-			# i^th partition is the validation set
-			X_validation = X_train[index_list[i], :]
-			Y_validation = Y_train[index_list[i], :]
+		for j in range(K):
+			# j^th partition is the validation set
+			X_validation = X_train[index_list[j], :]
+			Y_validation = Y_train[index_list[j], :]
 			# use remaining as training set
-			X = np.delete(X_train, index_list[i], axis=0)
-			Y = np.delete(Y_train, index_list[i], axis=0)
+			X = np.delete(X_train, index_list[j], axis=0)
+			Y = np.delete(Y_train, index_list[j], axis=0)
 			# train multi-class classification model (SVM)
 			model = svm_train_multi_gaussian_LIBSVM(X.copy(), Y.copy(), C[i], gamma)
 			# determine validation accuracy
@@ -480,7 +480,7 @@ def cross_validation(K, X_train, Y_train, C, gamma, X_test, Y_test):
 		# determine accuracy on test set
 		p_labs, p_acc, p_vals = svm_test_multi_LIBSVM(X_test.copy(), Y_test.copy(), best_model)
 		# add accuracy to test_accuracy
-		test_accuracy[i] = accuracy
+		test_accuracy[i] = p_acc[0]
 		# check for max accuracy
 		if accuracy >= max_accuracy:
 			max_accuracy = accuracy
@@ -645,22 +645,27 @@ def main():
 			model_gaussian = svm_train_multi_gaussian_LIBSVM(X_train.copy(), Y_train.copy(), 1, 0.05)
 			# test model on test set (p_labs contain labels)
 			p_labs, p_acc, p_vals = svm_test_multi_LIBSVM(X_test.copy(), Y_test.copy(), model_gaussian)
+			p = np.array(p_labs)
 			# initialise confusion matrix
 			confusion_matrix = [[0 for j in range(10)] for i in range(10)]
 			# go through all examples
-			for i in range(len(p_labs)):
+			for i in range(p.shape[0]):
 				# increment appropriate entry
-				confusion_matrix[Y_test[i]][p_labs[i]] += 1
+				confusion_matrix[Y_test[i][0]][int(p[i])] += 1
+			print("Confusion matrix (multi-class)")
 			# save confusion matrix in a file
-			file = open("Q2_multi_confusion.txt")
+			file = open("Q2_multi_confusion.txt", "w")
 			file.write('Confusion matrix in case of multi-class classification\n')
-			file.write('(Rows represent actual value (0-9) and columns represent predicted value (0-9))')
+			file.write('(Rows represent actual value (0-9) and columns represent predicted value (0-9))\n')
 			for i in range(10):
 				for j in range(10):
-					file.write(confusion_matrix[i][j])
+					file.write(str(confusion_matrix[i][j]))
 					file.write('\t')
+					print(confusion_matrix[i][j], end='\t')
 				file.write('\n')
+				print()
 			file.write('\n\n')
+			print('\n')
 			# determine confusion matrix (binary)
 			# filter data
 			X_train, Y_train = filter_data(X_train, Y_train, [4, 5])
@@ -669,20 +674,26 @@ def main():
 			model_gaussian = svm_train_binary_gaussian_LIBSVM(X_train.copy(), Y_train.copy(), 4, 1, 0.05)
 			# test model on test set (p_labs contain labels)
 			p_labs, p_acc, p_vals = svm_test_binary_LIBSVM(X_test.copy(), Y_test.copy(), 4, model_gaussian)
+			p = np.array(p_labs)
+			for i in range(p.shape[0]):
+				p[i] = 4 if p[i] < 0 else 5
 			# initialise confusion matrix
 			confusion_matrix = [[0 for j in range(10)] for i in range(10)]
 			# go through all examples
-			for i in range(len(p_labs)):
+			for i in range(p.shape[0]):
 				# increment appropriate entry
-				confusion_matrix[Y_test[i]][p_labs[i]] += 1
+				confusion_matrix[Y_test[i][0]][int(p[i])] += 1
+			print("Confusion matrix (binary)")
 			# save confusion matrix in a file
 			file.write('Confusion matrix in case of binary classification\n')
-			file.write('(Rows represent actual value (4-5) and columns represent predicted value (4-5))')
+			file.write('(Rows represent actual value (4-5) and columns represent predicted value (4-5))\n')
 			for i in range(10):
 				for j in range(10):
-					file.write(confusion_matrix[i][j])
+					file.write(str(confusion_matrix[i][j]))
+					print(confusion_matrix[i][j], end='\t')
 					file.write('\t')
 				file.write('\n')
+				print()
 			file.write('\n\n')
 			# close file
 			file.close()
@@ -699,6 +710,7 @@ def main():
 			plt.xscale("log")
 			plt.plot(C, validation_accuracy, label="Cross-Validation Accuracy (in %)")
 			plt.plot(C, test_accuracy, label="Test Accuracy (in %)")
+			plt.legend()
 			plt.show()
 
 

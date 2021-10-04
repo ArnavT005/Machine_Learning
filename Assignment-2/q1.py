@@ -1,17 +1,20 @@
+from collections import Counter
 import pandas as pd
 import numpy as np
 import string
 import random
+import json
 import nltk
-import math
+import sys
 nltk.download('punkt')
+nltk.download('stopwords')
 
 # parse review data and generate training/test set
-# parameter file stores the name of the file
+# file: name of the file
 def parse_json(file):
 	# read review file line-by-line and store the dataframe
 	df = pd.read_json(file, lines=True)
-	# store reviewText and overall ratings
+	# store reviewText and overall ratings (and summary)
 	# convert to list
 	X = df["reviewText"].tolist()
 	Y = df["overall"].tolist()
@@ -94,7 +97,7 @@ def extend_data(X, summary):
 		# store number of words in X[i] and summary
 		num_words_X = len(X[i])
 		num_words_S = len(summary[i])
-		# extend X[i] only if summary is non-empty
+		# extend X[i] only if X[i] is empty or summary is non-empty
 		if X[i] == []:
 			X[i].extend(summary[i])
 			continue
@@ -170,9 +173,9 @@ def naive_bayes_train(X, Y, V, size):
 # function to test Naive-Bayes classifier (multinomial)
 # X: test data (input, list of list of words)
 # Y: test data (output, review rating)
-# V: word vocabulary (size = |V|)
-# phi, theta: learnt parameters (model)
-def naive_bayes_test(X, Y, V, size, phi, theta):
+# V: word vocabulary
+# phi, theta: model parameters
+def naive_bayes_test(X, Y, V, phi, theta):
 	# number of test examples
 	m = len(Y)
 	# count accuracy = (accuracy_count / m) * 100
@@ -187,25 +190,26 @@ def naive_bayes_test(X, Y, V, size, phi, theta):
 		max_class = 0
 		for k in range(5):
 			# add the prior probability
-			temp_value = math.log(phi[k])
+			temp_value = np.log(phi[k])
 			# go through all words in example i
 			for word in X[i]:
 				if word in V.keys():
 					# get word index
 					word_index = V[word]
-					# add to tempValue
-					temp_value += math.log(theta[k][word_index - 1])
+					# add to temp_value
+					temp_value += np.log(theta[k][word_index - 1])
 				else:
 					# word is UNKNOWN, add log(P(UNKNOWN|y=k))
-					temp_value += math.log(theta[k][size - 1])
+					word_index = V['UNKNOWN']
+					temp_value += np.log(theta[k][word_index - 1])
 			# check if it is the maximum value
 			if max_class == 0:
 				max_value = temp_value
 				max_class = k + 1
-			elif temp_value >= max_value:
+			elif temp_value > max_value:
 				max_value = temp_value
 				max_class = k + 1
-		# predict class (maxClass)
+		# predict class (max_class)
 		if max_class == Y[i]:
 			# correct prediction, increase accuracy count
 			accuracy_count += 1
@@ -215,9 +219,8 @@ def naive_bayes_test(X, Y, V, size, phi, theta):
 	return (accuracy_count * 100) / m, confusion_matrix
 
 # function to give random predictions on test data
-# X: test data (input, list of list of words)
 # Y: test data (output, review rating)
-def random_test(X, Y):
+def random_test(Y):
 	# number of test examples
 	m = len(Y)
 	# go through all examples (predict randomly)
@@ -231,10 +234,9 @@ def random_test(X, Y):
 	return (accuracy_count * 100) / m
 
 # function to give majority predictions on test data
-# X: test data (input, list of list of words)
 # Y: test data (output, review rating)
 # majority_class: class which occurs most of the times in the training data
-def majority_test(X, Y, majority_class):
+def majority_test(Y, majority_class):
 	# number of test examples
 	m = len(Y)
 	# go through all examples (predict majority)
@@ -254,7 +256,7 @@ def f1_score(confusion_matrix):
 	# determine per-class precision, recall and total count
 	precision = [0 for i in range(k)]
 	recall = [0 for i in range(k)]
-	f1_score = [0 for i in range(k)]
+	f1 = [0 for i in range(k)]
 	total_count = [0 for i in range(k)]
 	# store true positives (diagonal entries)
 	diagonal_count = 0
@@ -272,59 +274,140 @@ def f1_score(confusion_matrix):
 		# determine precision, recall, f1-score and total count
 		precision[i] = TP / TP_FP
 		recall[i] = TP / TP_FN
-		f1_score[i] = (2 * precision[i] * recall[i]) / (precision[i] + recall[i])
+		f1[i] = (2 * precision[i] * recall[i]) / (precision[i] + recall[i])
 		total_count[i] = TP_FN
 	# determine macro-averaged f1-score
-	macro_f1 = sum(f1_score) / len(f1_score)
+	macro_f1 = sum(f1) / k
 	# determine weighted f1-score
 	total_samples = sum(total_count)
 	# determine weighted f1-score
 	weighted_sum = 0
 	for i in range(k):
-		weighted_sum += total_count[i] * f1_score[i]
+		weighted_sum += total_count[i] * f1[i]
 	weighted_f1 = weighted_sum / total_samples
 	# determine micro-averaged f1-score
 	micro_f1 = diagonal_count / total_samples
 	# return all three scores and per-class score
-	return f1_score, macro_f1, weighted_f1, micro_f1
+	return f1, macro_f1, weighted_f1, micro_f1
 
-print("Parsing JSON (train)")
-X, Y, summary = parse_json("Music_Review_train.json")
-print("JSON parsed (train)")
-print("Processing text (train)")
-X = preprocess(X)
-summary = preprocess(summary)
-print("Text processed (train)")
-print("Extending data (train)")
-X = extend_data(X, summary)
-print("Data extended (train)")
-print("Creating vocabulary")
-V, size = create_vocabulary(X)
-print("Vocabulary created")
-print("Vocab Size: " + str(size))
-print("Learning model")
-phi, theta, majority_class = naive_bayes_train(X, Y, V, size)
-print("Model learnt")
-print("Parsing JSON (test)")
-X, Y, summary = parse_json("Music_Review_test.json")
-print("JSON parsed (test)")
-print("Processing text (test)")
-X = preprocess(X)
-summary = preprocess(summary)
-print("Text processed (test)")
-print("Extending data (test)")
-X = extend_data(X, summary)
-print("Data extended (test)")
-print("Testing Model")
-accuracy, confusion_matrix = naive_bayes_test(X, Y, V, size, phi, theta)
-print("Model tested")
-print("NB Accuracy: " + str(accuracy))
-for i in range(5):
-	for j in range(5):
-		print(confusion_matrix[i][j], end='\t')
-	print()
-f1_score, macro_f1, weighted_f1, micro_f1 = f1_score(confusion_matrix)
-print(f1_score)
-print("Macro: " + str(macro_f1))
-print("Weighted: " + str(weighted_f1))
-print("Micro: " + str(micro_f1))
+
+## EXECUTION FUNCTIONS ##
+
+# driver function (main)
+def main():
+	# process command line arguments
+	if len(sys.argv) < 4:
+		# insufficient number of arguments, print error and exit
+		print("Error: All arguments not provided.")
+		exit()
+	if len(sys.argv) > 4:
+		# extra arguments provided, print warning
+		print("Warning: Extra arguments are provided")
+	# at least four arguments provided
+	# assuming that the arguments are correct, collect relevant data 
+	train_filename = sys.argv[1]
+	test_filename = sys.argv[2]
+	part_num = sys.argv[3]
+	# load training/test data
+	X_train, Y_train, summary_train = parse_json(train_filename)
+	X_test, Y_test, summary_test = parse_json(test_filename)
+	# switch on parts
+	if part_num == 'a':
+		# preprocess input data, not using summary
+		X_train = preprocess(X_train)
+		X_test = preprocess(X_test)
+		# create vocabulary and store it in a file
+		V, size = create_vocabulary(X_train)
+		json.dump(V, open("vocab_1.txt", "w"))
+		# train model
+		phi, theta, majority_class = naive_bayes_train(X_train, Y_train, V, size)
+		# test model on training set
+		accuracy, confusion_matrix = naive_bayes_test(X_train, Y_train, V, phi, theta)
+		print("Training accuracy (in %): " + str(accuracy))
+		# test model on test set
+		accuracy, confusion_matrix = naive_bayes_test(X_test, Y_test, V, phi, theta)
+		print("Test accuracy (in %): " + str(accuracy))
+		# determine macro-f1 score on test data
+		f1, macro_f1, weighted_f1, micro_f1 = f1_score(confusion_matrix)
+		print("Macro F1-score: " + str(macro_f1))
+		# print f1-score per class
+		for i in range(5):
+			print("F1-score for class " + str(i + 1) + ": " + str(f1[i]))
+	elif part_num == 'b':
+		# determine majority class in training data
+		majority_class, count = Counter(Y_train).most_common()[0]
+		# determine majority accuracy
+		accuracy = majority_test(Y_test, majority_class)
+		print("Majority accuracy (in %): " + str(accuracy))
+		# determine random accuracy
+		accuracy = random_test(Y_test)
+		print("Random accuracy (in %): " + str(accuracy))
+	elif part_num == 'c':
+		# draw confusion matrix
+		# first train and test data
+		X_train = preprocess(X_train)
+		X_test = preprocess(X_test)
+		# create vocabulary and store it in a file
+		V, size = create_vocabulary(X_train)
+		# train model
+		phi, theta, majority_class = naive_bayes_train(X_train, Y_train, V, size)
+		# test model on test set, find confusion matrixs
+		accuracy, confusion_matrix = naive_bayes_test(X_test, Y_test, V, phi, theta)
+		print("Confusion matrix:")
+		# save confusion matrix in a file
+		file = open("Q1_confusion.txt", "w")
+		file.write('Confusion matrix in case of NB classification (no stopword removal or stemming)\n')
+		file.write('(Rows represent actual rating (1-5) and columns represent predicted rating (1-5))\n')
+		for i in range(5):
+			for j in range(5):
+				file.write(str(confusion_matrix[i][j]))
+				file.write('\t')
+				print(confusion_matrix[i][j], end='\t')
+			file.write('\n')
+			print()
+		# close file
+		file.close()
+	elif part_num == 'd':
+		# stopword removal and stemming
+		# preprocess input data, not using summary 
+		X_train = preprocess_advanced(X_train)
+		X_test = preprocess_advanced(X_test)
+		# create vocabulary and store it in a file
+		V, size = create_vocabulary(X_train)
+		json.dump(V, open("vocab_2.txt", "w"))
+		# train model
+		phi, theta, majority_class = naive_bayes_train(X_train, Y_train, V, size)
+		# test model on test set
+		accuracy, confusion_matrix = naive_bayes_test(X_test, Y_test, V, phi, theta)
+		print("Test accuracy (in %): " + str(accuracy))
+		# determine macro-f1 score on test data
+		f1, macro_f1, weighted_f1, micro_f1 = f1_score(confusion_matrix)
+		print("Macro F1-score: " + str(macro_f1))
+		# print f1-score per class
+		for i in range(5):
+			print("F1-score for class " + str(i + 1) + ": " + str(f1[i]))
+	elif part_num == 'g':
+		# incorporate summary into training data
+		X_train = preprocess_advanced(X_train)
+		summary_train = preprocess_advanced(summary_train)
+		X_train = extend_data(X_train, summary_train)
+		X_test = preprocess_advanced(X_test)
+		summary_test = preprocess_advanced(summary_test)
+		X_test = extend_data(X_test, summary_test)
+		# create vocabulary and store it in a file
+		V, size = create_vocabulary(X_train)
+		json.dump(V, open("vocab_3.txt", "w"))
+		# train model
+		phi, theta, majority_class = naive_bayes_train(X_train, Y_train, V, size)
+		# test model on test set
+		accuracy, confusion_matrix = naive_bayes_test(X_test, Y_test, V, phi, theta)
+		print("Test accuracy (in %): " + str(accuracy))
+		# determine macro-f1 score on test data
+		f1, macro_f1, weighted_f1, micro_f1 = f1_score(confusion_matrix)
+		print("Macro F1-score: " + str(macro_f1))
+		# print f1-score per class
+		for i in range(5):
+			print("F1-score for class " + str(i + 1) + ": " + str(f1[i]))
+	
+
+main()

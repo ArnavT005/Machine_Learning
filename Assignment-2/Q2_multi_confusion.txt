@@ -1,0 +1,28 @@
+Confusion matrix in case of multi-class classification
+(Rows represent actual value (0-9) and columns represent predicted value (0-9))
+969	0	1	0	0	3	4	1	2	0	
+0	1121	3	2	1	2	2	0	3	1	
+4	0	1000	4	2	0	1	6	15	0	
+0	0	8	985	0	4	0	6	5	2	
+0	0	4	0	962	0	6	0	2	8	
+2	0	3	6	1	866	7	1	5	1	
+6	3	0	0	4	4	939	0	2	0	
+1	4	19	2	4	0	0	987	2	9	
+4	0	3	10	1	5	3	3	942	3	
+4	4	3	8	13	4	0	9	12	952	
+
+
+Confusion matrix in case of binary classification
+(Rows represent actual value (4-5) and columns represent predicted value (4-5))
+0	0	0	0	0	0	0	0	0	0	
+0	0	0	0	0	0	0	0	0	0	
+0	0	0	0	0	0	0	0	0	0	
+0	0	0	0	0	0	0	0	0	0	
+0	0	0	0	981	1	0	0	0	0	
+0	0	0	0	1	891	0	0	0	0	
+0	0	0	0	0	0	0	0	0	0	
+0	0	0	0	0	0	0	0	0	0	
+0	0	0	0	0	0	0	0	0	0	
+0	0	0	0	0	0	0	0	0	0	
+
+
