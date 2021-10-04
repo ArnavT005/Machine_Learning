@@ -54,7 +54,7 @@ def filter_data(X, Y, class_list):
 # X: input data (matrix of transposes)
 # Y: target variable (column vector)
 # class_num: class number that needs to be treated as -1, other class will be 1
-# C: regularization hyperparameter
+# C: model hyperparameter
 def svm_train_binary_linear_CVXOPT(X, Y, class_num, C):
 	# store shape of training data
 	m, n = X.shape
@@ -84,7 +84,7 @@ def svm_train_binary_linear_CVXOPT(X, Y, class_num, C):
 	# row_stack temp_1 and temp_2
 	temp = np.row_stack((temp_1, temp_2))
 	h = matrix(temp, tc='d')
-	# determine matrix q (column of ones)
+	# determine matrix q (column of minus ones)
 	temp_1 = -np.ones((m, 1))
 	q = matrix(temp_1, tc='d')
 	# determine matrix P
@@ -108,11 +108,11 @@ def svm_train_binary_linear_CVXOPT(X, Y, class_num, C):
 	support_vectors_alpha = alpha[support_vectors_indices, :]
 	support_vectors_X = X[support_vectors_indices, :]
 	support_vectors_Y = Y[support_vectors_indices, :]
-	# determine intercept term, as all support_alpha < 1, therefore, noise terms are all zero
+	# determine intercept term, as all support_alpha < 1, therefore, noise terms are all zero (for support vectors)
 	# hence, b = support_vector_Y - w.T @ support_vector_X (constraint becomes equality)
 	# determining all such b's using all such vectors
 	b = support_vectors_Y - support_vectors_X @ w
-	# return parameters w and b[0][0] (all terms in vector will be the same)
+	# return parameters w and b (all terms in vector will be the same)
 	# also return indices of SV and their coefficients
 	return support_vectors_indices, support_vectors_alpha, w, b
 
@@ -120,7 +120,7 @@ def svm_train_binary_linear_CVXOPT(X, Y, class_num, C):
 # X: input data (matrix of transposes)
 # Y: target variable (column vector)
 # class_num: class number that needs to be treated as -1, other class will be 1
-# C: regularization hyperparameter
+# C: model hyperparameter
 # gamma: kernel parameter
 def svm_train_binary_gaussian_CVXOPT(X, Y, class_num, C, gamma):
 	# store shape of training data
@@ -152,7 +152,7 @@ def svm_train_binary_gaussian_CVXOPT(X, Y, class_num, C, gamma):
 	# row_stack temp_1 and temp_2
 	temp = np.row_stack((temp_1, temp_2))
 	h = matrix(temp, tc='d')
-	# determine matrix q (column of ones)
+	# determine matrix q (column of minus ones)
 	temp_1 = -np.ones((m, 1))
 	q = matrix(temp_1, tc='d')
 	# determine matrix P (P_ij = y_i*y_j*exp(-gamma*||x_i-x_j||^2))
@@ -161,10 +161,10 @@ def svm_train_binary_gaussian_CVXOPT(X, Y, class_num, C, gamma):
 	temp_2 = (X**2).sum(axis=1).reshape((m, 1))
 	# creating matrix of pairwise target-products (used in kernel matrix)
 	temp_3 = Y @ Y.T
-	# create P = temp_3 * np.exp(-0.05(temp_2 + temp_2.T - 2 * temp_1)) (temp_2 is getting broadcasted)
-	P = temp_3 * np.exp(-gamma * (temp_2 + temp_2.T - 2 * temp_1))
+	# create temp_4 = temp_3 * np.exp(-0.05(temp_2 + temp_2.T - 2 * temp_1)) (temp_2 is getting broadcasted)
+	temp_4 = temp_3 * np.exp(-gamma * (temp_2 + temp_2.T - 2 * temp_1))
 	# convert to matrix
-	P = matrix(P, tc='d')
+	P = matrix(temp_4, tc='d')
 	# solve the dual optimization (minimization) problem
 	solution = solvers.qp(P, q, G, h, A, b)
 	# extract optimal value of alpha (column vector)
@@ -200,7 +200,7 @@ def svm_train_multi_gaussian_CVXOPT(X, Y, k, C, gamma):
 			# filter training data and retrieve subset (class = i and j)
 			X_subset, Y_subset = filter_data(X, Y, [i, j])
 			# train model, store in alpha_s, X_s and Y_s (higher class is set to one)
-			index_s[i][j], alpha_s[i][j], X_s[i][j], Y_s[i][j] = svm_train_binary_gaussian_CVXOPT(X_subset, Y_subset, i, C, gamma)
+			index_s[i][j], alpha_s[i][j], X_s[i][j], Y_s[i][j] = svm_train_binary_gaussian_CVXOPT(X_subset.copy(), Y_subset.copy(), i, C, gamma)
 			print("Classifier trained: " + str(i) + " vs " + str(j))	
 	# all models trained
 	# return parameters
@@ -236,23 +236,23 @@ def svm_test_binary_linear_CVXOPT(X, Y, class1, class2, w, b):
 # X: input data (matrix of transposes)
 # Y: target variable (column vector)
 # class1: class number that needs to be treated as -1, other class (class2) will be 1
-# alpha_s, X_s and Y_s are support vectors coefficients, input features and target values respectively
+# alpha_s, X_s and Y_s: support vector coefficients, input features and target values respectively
 # gamma: kernel parameter
 def svm_test_binary_gaussian_CVXOPT(X, Y, class1, class2, alpha_s, X_s, Y_s, gamma):
 	# store the shape of test data
 	m, n = X.shape
-	# determine L2-norm matrix of X
+	# determine square norm of each example (store as row vector)
 	X_2 = (X**2).sum(axis=1).reshape((1, m))	
 	# store number of support vectors
 	num_vectors = alpha_s.shape[0]
 	# determine intercept term, b = y_s - summation(alpha_j * y_j * K(x_s, x_j)) over j
 	temp = 0	
 	for i in range(num_vectors):
-		temp += alpha_s[i][0] * Y_s[i][0] * np.exp(-gamma * (X_s[0, :] - X_s[i, :]).T @ (X_s[0, :] - X_s[i, :]))
+		temp += alpha_s[i][0] * Y_s[i][0] * np.exp(-gamma * ((X_s[0, :] - X_s[i, :]).T @ (X_s[0, :] - X_s[i, :])))
 	b = Y_s[0][0] - temp
-	# determine L2-norm matrix of X_s[j][l]
+	# determine square-norm matrix of X_s (store as column vector)
 	X_s_2 = (X_s**2).sum(axis=1).reshape((num_vectors, 1))
-	# determine test-suppor_vector cross-outer-product matrix	
+	# determine test_vector-support_vector cross-outer-product matrix	
 	cross_outer_product = X_s @ X.T
 	# detemine kernel matrix
 	K = np.exp(-gamma * (X_s_2 + X_2 - 2 * cross_outer_product))
@@ -293,7 +293,7 @@ def svm_test_multi_gaussian_CVXOPT(X, Y, alpha_s, X_s, Y_s, gamma):
 	vote = [[0 for j in range(k)] for i in range(m)]
 	# initialise max score array (absolute functional margin)
 	max_score = [[0 for j in range(k)] for i in range(m)]
-	# determine L2-norm matrix of X
+	# determine square-norm matrix of X
 	X_2 = (X**2).sum(axis=1).reshape((1, m))
 	# go through all models and vote on each example
 	for j in range(k):
@@ -304,11 +304,11 @@ def svm_test_multi_gaussian_CVXOPT(X, Y, alpha_s, X_s, Y_s, gamma):
 			# determine intercept term, b = y_s - summation(alpha_i * y_i * K(x_s, x_i)) over i
 			temp = 0
 			for i in range(num_vectors):
-				temp += alpha_s[j][l][i][0] * Y_s[j][l][i][0] * np.exp(-gamma * (X_s[j][l][i, :] - X_s[j][l][0, :]).T @ (X_s[j][l][i, :] - X_s[j][l][0, :]))
+				temp += alpha_s[j][l][i][0] * Y_s[j][l][i][0] * np.exp(-gamma * ((X_s[j][l][i, :] - X_s[j][l][0, :]).T @ (X_s[j][l][i, :] - X_s[j][l][0, :])))
 			b = Y_s[j][l][0][0] - temp
-			# determine L2-norm matrix of X_s[j][l]
+			# determine square-norm matrix of X_s[j][l]
 			X_s_2 = (X_s[j][l]**2).sum(axis=1).reshape((num_vectors, 1))
-			# determine test-suppor_vector cross-outer-product matrix	
+			# determine test_vector-support_vector cross-outer-product matrix	
 			cross_outer_product = X_s[j][l] @ X.T
 			# detemine kernel matrix
 			K = np.exp(-gamma * (X_s_2 + X_2 - 2 * cross_outer_product))
@@ -358,7 +358,7 @@ def svm_train_binary_linear_LIBSVM(X, Y, class_num, C):
 		else:
 			# other class (change to 1)
 			Y[i][0] = 1
-	# learn SVM model (linear kernel, C )
+	# learn SVM model (linear kernel, C)
 	model = svm_train(Y.reshape(-1), X, '-t 0 -c ' + str(C))
 	# return learnt model
 	return model
@@ -423,8 +423,6 @@ def svm_test_binary_LIBSVM(X, Y, class_num, model):
 # Y: target variable (column vector)
 # model: it is the learnt SVM model
 def svm_test_multi_LIBSVM(X, Y, model):
-	# store the shape of test data
-	m, n = X.shape
 	# return prediction accuracy
 	return svm_predict(Y.reshape(-1), X, model)
 
@@ -520,11 +518,14 @@ def main():
 		if part_num == 'a':
 			# use linear kernel (CVXOPT)
 			# get support vectors and parameters w and b
+			start_time = time.time()
 			SV_indices, SV_coeff, w, b = svm_train_binary_linear_CVXOPT(X_train.copy(), Y_train.copy(), 4, 1)
+			end_time = time.time()
+			print("Training time (in s): " + str(end_time - start_time))
 			print("Number of support vectors, nSV: " + str(len(SV_indices)))
 			print("SV indices in X: " + str(SV_indices))
-			print("SV coefficients: " + str(SV_coeff))
-			print("\'w\' parameter: " + str(w))
+			print("SV coefficients (transpose): " + str(SV_coeff.T))
+			print("\'w\' parameter (transpose): " + str(w.T))
 			print("\'b\' parameter: " + str(b[0]))
 			# test model on training set
 			accuracy = svm_test_binary_linear_CVXOPT(X_train.copy(), Y_train.copy(), 4, 5, w, b[0])
@@ -535,82 +536,56 @@ def main():
 		elif part_num == 'b':
 			# use gaussian kernel (CVXOPT)
 			# get support vectors
+			start_time = time.time()
 			SV_indices, SV_coeff, SV_x, SV_y = svm_train_binary_gaussian_CVXOPT(X_train.copy(), Y_train.copy(), 4, 1, 0.05)
+			end_time = time.time()
+			print("Training time (in s): " + str(end_time - start_time))
 			print("Number of support vectors, nSV: " + str(len(SV_indices)))
 			print("SV indices in X: " + str(SV_indices))
-			print("SV coefficients: " + str(SV_coeff))
+			print("SV coefficients (transpose): " + str(SV_coeff.T))
 			# test model on training set
 			accuracy = svm_test_binary_gaussian_CVXOPT(X_train.copy(), Y_train.copy(), 4, 5, SV_coeff, SV_x, SV_y, 0.05)
 			print("Training accuracy (in %): " + str(accuracy))
 			# test model on test set
 			accuracy = svm_test_binary_gaussian_CVXOPT(X_test.copy(), Y_test.copy(), 4, 5, SV_coeff, SV_x, SV_y, 0.05)
 			print("Test accuracy (in %): " + str(accuracy))
-			# compare these accuracies with that in case of linear kernel
-			# use linear kernel (CVXOPT)
-			# get support vectors and parameters w and b
-			SV_indices, SV_coeff, w, b = svm_train_binary_linear_CVXOPT(X_train.copy(), Y_train.copy(), 4, 1)
-			# test model on training set
-			accuracy = svm_test_binary_linear_CVXOPT(X_train.copy(), Y_train.copy(), 4, 5, w, b[0])
-			print("Training accuracy (in %) (Linear Kernel): " + str(accuracy))
-			# test model on test set
-			accuracy = svm_test_binary_linear_CVXOPT(X_test.copy(), Y_test.copy(), 4, 5, w, b[0])
-			print("Test accuracy (in %) (Linear Kernel): " + str(accuracy))
 		elif part_num == 'c':
 			# use linear kernel (LIBSVM)
-			print("For LIBSVM (linear)")
 			start_time = time.time()
 			model_linear = svm_train_binary_linear_LIBSVM(X_train.copy(), Y_train.copy(), 4, 1)
 			end_time = time.time()
-			print("Training time (in s): " + str(end_time - start_time))
+			print("Training time (in s) (Linear Kernel): " + str(end_time - start_time))
 			# get SV indices and coefficients
-			SV_indices_LIBSVM, SV_coeff_LIBSVM = model_linear.get_sv_indices(), model_linear.get_sv_coef()
-			print("Number of support vectors, nSV: " + str(len(SV_indices_LIBSVM)))
-			print("SV indices in X: " + str(SV_indices_LIBSVM))
-			print("SV coefficients: " + str(SV_coeff_LIBSVM))
+			SV_indices, SV_coeff = model_linear.get_sv_indices(), model_linear.get_sv_coef()
+			print("Number of support vectors, nSV: " + str(len(SV_indices)))
+			print("SV indices in X: " + str(SV_indices))
+			print("SV coefficients: " + str(SV_coeff))
+			# get support vectors
+			SV_X = X_train[SV_indices, :]
+			SV_Y = Y_train[SV_indices, :]
+			# determine w and b parameter
+			SV_alpha = np.array(SV_coeff).reshape((len(SV_indices), 1))
+			w = SV_X.T @ (SV_alpha * SV_Y)
+			b = SV_Y - SV_X @ w
+			print("\'w\' parameter (transpose): " + str(w.T))
+			print("\'b\' parameter: " + str(b[0]))
 			# test model on test set
-			temp_X, temp_Y = X_test, Y_test
-			p_labs_linear, p_acc_linear, p_vals_linear = svm_test_binary_LIBSVM(X_test.copy(), Y_test.copy(), 4, model_linear)
-			print("Test accuracy (in %) (Linear Kernel): " + str(p_acc_linear[0]))
-			# use linear kernel (CVXOPT)
-			# get support vectors and parameters w and b
-			print("For CVXOPT (linear)")
-			start_time = time.time()
-			SV_indices_CVXOPT, SV_coeff_CVXOPT, w, b = svm_train_binary_linear_CVXOPT(X_train.copy(), Y_train.copy(), 4, 1)
-			end_time = time.time()
-			print("Training time (in s): " + str(end_time - start_time))
-			print("Number of support vectors, nSV: " + str(len(SV_indices_CVXOPT)))
-			print("SV indices in X: " + str(SV_indices_CVXOPT))
-			print("SV coefficients: " + str(SV_coeff_CVXOPT))
-			# test model on test set
-			accuracy = svm_test_binary_linear_CVXOPT(X_test.copy(), Y_test.copy(), 4, 5, w, b[0])
-			print("Test accuracy (in %) (Linear Kernel): " + str(accuracy))
+			p_labs, p_acc, p_vals = svm_test_binary_LIBSVM(X_test.copy(), Y_test.copy(), 4, model_linear)
+			print("Test accuracy (in %) (Linear Kernel): " + str(p_acc[0]))
 			# use gaussian kernel (LIBSVM)
-			print("For LIBSVM (gaussian)")
 			start_time = time.time()
 			model_gaussian = svm_train_binary_gaussian_LIBSVM(X_train.copy(), Y_train.copy(), 4, 1, 0.05)
 			end_time = time.time()
-			print("Training time (in s): " + str(end_time - start_time))
+			print("Training time (in s) (Gaussian Kernel): " + str(end_time - start_time))
 			# get SV indices and coefficients
-			SV_indices_LIBSVM, SV_coeff_LIBSVM = model_gaussian.get_sv_indices(), model_gaussian.get_sv_coef()
-			print("Number of support vectors, nSV: " + str(len(SV_indices_LIBSVM)))
-			print("SV indices in X: " + str(SV_indices_LIBSVM))
-			print("SV coefficients: " + str(SV_coeff_LIBSVM))
+			SV_indices, SV_coeff = model_gaussian.get_sv_indices(), model_gaussian.get_sv_coef()
+			print("Number of support vectors, nSV: " + str(len(SV_indices)))
+			print("SV indices in X: " + str(SV_indices))
+			print("SV coefficients: " + str(SV_coeff))
+			print("SV indices in sorted order for comparison: " + str(SV_indices.sort()))
 			# test model on test set
-			p_labs_gaussian, p_acc_gaussian, p_vals_gaussian = svm_test_binary_LIBSVM(X_test.copy(), Y_test.copy(), 4, model_gaussian)
-			print("Test accuracy (in %) (Gaussian Kernel): " + str(p_acc_gaussian[0]))
-			# use gaussian kernel (CVXOPT)
-			# get support vectors and coefficients
-			print("For CVXOPT (gaussian)")
-			start_time = time.time()
-			SV_indices_CVXOPT, SV_coeff_CVXOPT, SV_x, SV_y = svm_train_binary_gaussian_CVXOPT(X_train.copy(), Y_train.copy(), 4, 1, 0.05)
-			end_time = time.time()
-			print("Training time (in s): " + str(end_time - start_time))
-			print("Number of support vectors, nSV: " + str(len(SV_indices_CVXOPT)))
-			print("SV indices in X: " + str(SV_indices_CVXOPT))
-			print("SV coefficients: " + str(SV_coeff_CVXOPT))
-			# test model on test set
-			accuracy = svm_test_binary_gaussian_CVXOPT(X_test.copy(), Y_test.copy(), 4, 5, SV_coeff_CVXOPT, SV_x, SV_y, 0.05)
-			print("Test accuracy (in %) (Gaussian Kernel): " + str(accuracy))
+			p_labs, p_acc, p_vals = svm_test_binary_LIBSVM(X_test.copy(), Y_test.copy(), 4, model_gaussian)
+			print("Test accuracy (in %) (Gaussian Kernel): " + str(p_acc[0]))
 	else:
 		# multi-class problem
 		# switch on parts
