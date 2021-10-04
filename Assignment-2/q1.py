@@ -22,19 +22,6 @@ def parse_json(file):
 	# return input/output data and summary
 	return X, Y, summary
 
-def preprocess_trivial(X):
-	table = str.maketrans('', '', string.punctuation)
-	X_ = [[] for i in range(len(X))]
-	for i in range(len(X)):
-		words = [word.translate(table) for word in X[i].split()]
-		for word in words:
-			if word.isalpha():
-				word = word.lower()
-				X_[i].append(word)
-			else:
-				X_[i].append(word)
-	return X_
-
 # function to preprocess input data
 # X is the list of texts
 def preprocess(X):
@@ -181,7 +168,7 @@ def naive_bayes_test(X, Y, V, phi, theta):
 	# count accuracy = (accuracy_count / m) * 100
 	accuracy_count = 0
 	# initialise confusion matrix
-	confusion_matrix = [[0 for j in range(5)] for i in range(5)]
+	confusion_matrix = np.zeros((5, 5))
 	# go through every example and make prediction
 	for i in range(m):
 		# maximise P(x|y=k)P(y=k) over 1 <= k <= 5
@@ -248,22 +235,18 @@ def majority_test(Y, majority_class):
 	# return accuracy = (accuracy_count / m) * 100
 	return (accuracy_count * 100) / m
 
-# function to compute F1-score (macro, weighted, micro)
+# function to compute F1-score (macro, per-class)
 # confusion_matrix: confusion matrix for the data
 def f1_score(confusion_matrix):
 	# store number of classes
-	k = len(confusion_matrix)
+	k = confusion_matrix.shape[0]
 	# determine per-class precision, recall and total count
 	precision = [0 for i in range(k)]
 	recall = [0 for i in range(k)]
 	f1 = [0 for i in range(k)]
-	total_count = [0 for i in range(k)]
-	# store true positives (diagonal entries)
-	diagonal_count = 0
 	for i in range(k):
 		# true positives
 		TP = confusion_matrix[i][i]
-		diagonal_count += TP
 		# count total examples which are actually of class (i + 1)
 		TP_FN = 0
 		# count total examples which are predicted to be of class (i + 1)
@@ -271,24 +254,14 @@ def f1_score(confusion_matrix):
 		for j in range(k):
 			TP_FN += confusion_matrix[i][j]
 			TP_FP += confusion_matrix[j][i]
-		# determine precision, recall, f1-score and total count
+		# determine precision, recall, f1-score
 		precision[i] = TP / TP_FP
 		recall[i] = TP / TP_FN
 		f1[i] = (2 * precision[i] * recall[i]) / (precision[i] + recall[i])
-		total_count[i] = TP_FN
 	# determine macro-averaged f1-score
 	macro_f1 = sum(f1) / k
-	# determine weighted f1-score
-	total_samples = sum(total_count)
-	# determine weighted f1-score
-	weighted_sum = 0
-	for i in range(k):
-		weighted_sum += total_count[i] * f1[i]
-	weighted_f1 = weighted_sum / total_samples
-	# determine micro-averaged f1-score
-	micro_f1 = diagonal_count / total_samples
-	# return all three scores and per-class score
-	return f1, macro_f1, weighted_f1, micro_f1
+	# return f1 and macro-f1 score
+	return f1, macro_f1
 
 
 ## EXECUTION FUNCTIONS ##
@@ -328,7 +301,7 @@ def main():
 		accuracy, confusion_matrix = naive_bayes_test(X_test, Y_test, V, phi, theta)
 		print("Test accuracy (in %): " + str(accuracy))
 		# determine macro-f1 score on test data
-		f1, macro_f1, weighted_f1, micro_f1 = f1_score(confusion_matrix)
+		f1, macro_f1 = f1_score(confusion_matrix)
 		print("Macro F1-score: " + str(macro_f1))
 		# print f1-score per class
 		for i in range(5):
@@ -347,24 +320,19 @@ def main():
 		# first train and test data
 		X_train = preprocess(X_train)
 		X_test = preprocess(X_test)
-		# create vocabulary and store it in a file
+		# create vocabulary
 		V, size = create_vocabulary(X_train)
 		# train model
 		phi, theta, majority_class = naive_bayes_train(X_train, Y_train, V, size)
 		# test model on test set, find confusion matrixs
 		accuracy, confusion_matrix = naive_bayes_test(X_test, Y_test, V, phi, theta)
 		print("Confusion matrix:")
+		print(confusion_matrix)
 		# save confusion matrix in a file
 		file = open("Q1_confusion.txt", "w")
 		file.write('Confusion matrix in case of NB classification (no stopword removal or stemming)\n')
 		file.write('(Rows represent actual rating (1-5) and columns represent predicted rating (1-5))\n')
-		for i in range(5):
-			for j in range(5):
-				file.write(str(confusion_matrix[i][j]))
-				file.write('\t')
-				print(confusion_matrix[i][j], end='\t')
-			file.write('\n')
-			print()
+		file.write(str(confusion_matrix))
 		# close file
 		file.close()
 	elif part_num == 'd':
@@ -381,7 +349,7 @@ def main():
 		accuracy, confusion_matrix = naive_bayes_test(X_test, Y_test, V, phi, theta)
 		print("Test accuracy (in %): " + str(accuracy))
 		# determine macro-f1 score on test data
-		f1, macro_f1, weighted_f1, micro_f1 = f1_score(confusion_matrix)
+		f1, macro_f1 = f1_score(confusion_matrix)
 		print("Macro F1-score: " + str(macro_f1))
 		# print f1-score per class
 		for i in range(5):
@@ -403,7 +371,7 @@ def main():
 		accuracy, confusion_matrix = naive_bayes_test(X_test, Y_test, V, phi, theta)
 		print("Test accuracy (in %): " + str(accuracy))
 		# determine macro-f1 score on test data
-		f1, macro_f1, weighted_f1, micro_f1 = f1_score(confusion_matrix)
+		f1, macro_f1 = f1_score(confusion_matrix)
 		print("Macro F1-score: " + str(macro_f1))
 		# print f1-score per class
 		for i in range(5):
