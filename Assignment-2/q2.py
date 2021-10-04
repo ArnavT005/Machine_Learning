@@ -173,7 +173,7 @@ def svm_train_binary_gaussian_CVXOPT(X, Y, class_num, C, gamma):
 	support_vectors_indices = []
 	for i in range(m):
 		# non-zero coefficient
-		if alpha[i][0] > 1e-4:
+		if alpha[i][0] > 1e-3:
 			support_vectors_indices.append(i)
 	# slice alpha, X and Y to get support vectors
 	support_vectors_alpha = alpha[support_vectors_indices, :]
@@ -560,15 +560,8 @@ def main():
 			print("Number of support vectors, nSV: " + str(len(SV_indices)))
 			print("SV indices in X: " + str(SV_indices))
 			print("SV coefficients: " + str(SV_coeff))
-			# get support vectors
-			SV_X = X_train[SV_indices, :]
-			SV_Y = Y_train[SV_indices, :]
-			# determine w and b parameter
-			SV_alpha = np.array(SV_coeff).reshape((len(SV_indices), 1))
-			w = SV_X.T @ (SV_alpha * SV_Y)
-			b = SV_Y - SV_X @ w
-			print("\'w\' parameter (transpose): " + str(w.T))
-			print("\'b\' parameter: " + str(b[0]))
+			SV_indices.sort()
+			print("SV indices in sorted order for comparison: " + str(SV_indices))
 			# test model on test set
 			p_labs, p_acc, p_vals = svm_test_binary_LIBSVM(X_test.copy(), Y_test.copy(), 4, model_linear)
 			print("Test accuracy (in %) (Linear Kernel): " + str(p_acc[0]))
@@ -582,7 +575,8 @@ def main():
 			print("Number of support vectors, nSV: " + str(len(SV_indices)))
 			print("SV indices in X: " + str(SV_indices))
 			print("SV coefficients: " + str(SV_coeff))
-			print("SV indices in sorted order for comparison: " + str(SV_indices.sort()))
+			SV_indices.sort()
+			print("SV indices in sorted order for comparison: " + str(SV_indices))
 			# test model on test set
 			p_labs, p_acc, p_vals = svm_test_binary_LIBSVM(X_test.copy(), Y_test.copy(), 4, model_gaussian)
 			print("Test accuracy (in %) (Gaussian Kernel): " + str(p_acc[0]))
