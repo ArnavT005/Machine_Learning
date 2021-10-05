@@ -1,4 +1,6 @@
+import matplotlib.pyplot as plt
 from collections import Counter
+import seaborn as sns
 import pandas as pd
 import numpy as np
 import string
@@ -24,7 +26,8 @@ def parse_json(file):
 
 # function to preprocess input data
 # X is the list of texts
-def preprocess(X):
+# punctuation: flag to indicate that ? and ! need to be kept
+def preprocess(X, punctuation=False):
 	# initialise new input list (to be returned)
 	# for every example, it stores the list of words
 	X_ = [[] for i in range(len(X))]
@@ -41,15 +44,20 @@ def preprocess(X):
 				word = word.lower()
 				# append word into X_ list 
 				X_[i].append(word)
+			elif punctuation:
+				# check for exclamation/question mark
+				if word == '!' or word == '?':
+					X_[i].append(word)
 	# return preprocessed data
 	return X_
 
 # function to preprocess input data
 # filter stop words and perform stemming
 # X is the list of texts (input data)
-def preprocess_advanced(X):
+# punctuation: flag to indicate that ? and ! need to be kept
+def preprocess_advanced(X, punctuation=False):
 	# store stop words (english)
-	stop_words = set(nltk.corpus.stopwords.words('english'))
+	stop_words = Counter(nltk.corpus.stopwords.words('english'))
 	# create stemmer object
 	stemmer = nltk.stem.porter.PorterStemmer()
 	# initialise new input list (to be returned)
@@ -68,9 +76,23 @@ def preprocess_advanced(X):
 				# stem word
 				word = stemmer.stem(word)
 				# append word into X_ list (only if it is not a stop word)
-				if not word in stop_words:
+				if word not in stop_words:
+					X_[i].append(word)
+			elif punctuation:
+				# check for exclamation/question mark
+				if word == '!' or word == '?':
 					X_[i].append(word)
 	# return preprocessed data
+	return X_
+
+# function to generate bigrams from given tokens
+# X: tokenized list of reviews
+def bigram_generator(X):
+	X_ = []
+	# go through all examples and generate bigrams
+	for i in range(len(X)):
+		X_.append(list(nltk.bigrams(X[i])))
+	# return the new list
 	return X_
 
 # function to extend training data by including summarized review text
@@ -96,7 +118,8 @@ def extend_data(X, summary):
 
 # create and return vocabulary (V)
 # X is the list of texts (input data)
-def create_vocabulary(X):
+# bigrams: flag that tells if bigram naive bayes is being used
+def create_vocabulary(X, bigrams=False):
 	# initialise vocabulary (dictionary)
 	V, size = {}, 0
 	# split every input
@@ -107,7 +130,10 @@ def create_vocabulary(X):
 				V[word] = size + 1
 				size += 1
 	# add unknown token to the dictionary (for unseen data)
-	V['UNKNOWN'] = size + 1
+	if bigrams:
+		V[('UNKNOWN', 'UNKNOWN')] = size + 1
+	else:
+		V['UNKNOWN'] = size + 1
 	size += 1
 	# return the vocabulary (and size)
 	return V, size
@@ -157,6 +183,48 @@ def naive_bayes_train(X, Y, V, size):
 	# return these parameters
 	return phi, theta, majority_class
 
+# function to get bigram probabilities
+# X: input data (list of list of bigrams)
+# Y: target variable (review rating)
+# V_bigram: bigram vocabulary
+# V_unigram: unigram vocabulary
+def bigram_probabilities(X, Y, V_bigram, V_unigram):
+	# number of training examples, bigrams and unigrams
+	m, size_b, size_u = len(Y), len(V_bigram), len(V_unigram)
+	# determine inverse mapping
+	inv_V_bigram = {value: key for key, value in V_bigram.items()}
+	# count occurences of bigrams in class (i + 1) starting with word (j + 1) (in V_unigram)
+	count = [[0 for j in range(size_u)] for i in range(5)]
+	# go through all bigrams
+	for j in range(m):
+		for bigram in X[j]:
+			# class is Y[j], determine word index of first word
+			word_index = V_unigram[bigram[0]]
+			# increment count
+			count[Y[j] - 1][word_index - 1] += 1
+	# determine bigram probabilities (do smoothing) (for each class) = (freq(w_1, w_2) + 1) / (sum(w_1, w) + |V_bigram|)
+	bigram_prob = [[0.0 for j in range(size_b)] for i in range(5)]
+	# initialize probabilities with smoothing term (1 / count[class][first_word] + |V_bigram|)
+	for i in range(5):
+		for j in range(size_b):
+			# determine first word of (j + 1) bigram
+			bigram = inv_V_bigram[j + 1]
+			word_index = V_unigram[bigram[0]]
+			# initialize probabilities
+			bigram_prob[i][j] += (1 / (count[i][word_index - 1] + size_b))
+	# go through all bigrams
+	for j in range(m):
+		for bigram in X[j]:
+			# increase frequency (class Y[j]), get bigram index
+			bigram_index = V_bigram[bigram]
+			# get index of first word
+			word_index = V_unigram[bigram[0]]
+			# increase frequency (denominator is count[Y[j] - 1][word_index - 1] + |V_bigram|)
+			bigram_prob[Y[j] - 1][bigram_index - 1] += (1 / (count[Y[j] - 1][word_index - 1] + size_b))
+	# all probabilities computed
+	# return these probabilities
+	return bigram_prob
+
 # function to test Naive-Bayes classifier (multinomial)
 # X: test data (input, list of list of words)
 # Y: test data (output, review rating)
@@ -189,6 +257,73 @@ def naive_bayes_test(X, Y, V, phi, theta):
 					# word is UNKNOWN, add log(P(UNKNOWN|y=k))
 					word_index = V['UNKNOWN']
 					temp_value += np.log(theta[k][word_index - 1])
+			# check if it is the maximum value
+			if max_class == 0:
+				max_value = temp_value
+				max_class = k + 1
+			elif temp_value > max_value:
+				max_value = temp_value
+				max_class = k + 1
+		# predict class (max_class)
+		if max_class == Y[i]:
+			# correct prediction, increase accuracy count
+			accuracy_count += 1
+		# add entry to confusion matrix
+		confusion_matrix[Y[i] - 1][max_class - 1] += 1
+	# return accuracy = (accuracy_count / m) * 100 and confusion matrix
+	return (accuracy_count * 100) / m, confusion_matrix
+
+# function to test bigrams Naive-Bayes classifier
+# X_bigram: test data (input, list of list of bigrams)
+# X_unigram: test data (input, list of list of words)
+# Y: test data (output, review rating)
+# V_bigram: word bigram vocabulary
+# V_unigram: word unigram vocabulary
+# phi, theta, bigram_prob: model parameters
+def bigram_naive_bayes_test(X_bigram, X_unigram, Y, V_bigram, V_unigram, phi, theta, bigram_prob):
+	# number of test examples
+	m = len(Y)
+	# count accuracy = (accuracy_count / m) * 100
+	accuracy_count = 0
+	# initialise confusion matrix
+	confusion_matrix = np.zeros((5, 5))
+	# go through every example and make prediction
+	for i in range(m):
+		# maximise P(x|y=k)P(y=k) over 1 <= k <= 5
+		# equivalent to maximising log(P(x|y=k)) + log(P(y=k))
+		max_value = 0
+		max_class = 0
+		for k in range(5):
+			# add the prior probability and first word probability
+			temp_value = np.log(phi[k])
+			if X_unigram[i] != []:
+				if X_unigram[i][0] in V_unigram.keys():
+					word_index = V_unigram[X_unigram[i][0]]
+				else:
+					word_index = V_unigram['UNKNOWN']
+				temp_value += np.log(theta[k][word_index - 1])
+				# go through all bigrams in example i
+				for bigram in X_bigram[i]:
+					if bigram in V_bigram.keys():
+						# get bigram index
+						bigram_index = V_bigram[bigram]
+						# add to temp_value
+						temp_value += np.log(bigram_prob[k][bigram_index - 1])
+					else:
+						# bigram is (UNKNOWN, UNKNOWN), add log(P(UNKNOWN|y=k))
+						bigram_index = V_bigram[('UNKNOWN', 'UNKNOWN')]
+						temp_value += np.log(bigram_prob[k][bigram_index - 1])
+				# go through all words in example i
+				for word in X_unigram[i]:
+					if word in V_unigram.keys():
+						# get word index
+						word_index = V_unigram[word]
+						# add to temp value
+						temp_value += np.log(theta[k][word_index - 1])
+					else:
+						# word is UNKNOWN, add log(P(UNKNOWN|y=k))
+						word_index = V_unigram['UNKNOWN']
+						temp_value += np.log(theta[k][word_index - 1])
 			# check if it is the maximum value
 			if max_class == 0:
 				max_value = temp_value
@@ -255,9 +390,12 @@ def f1_score(confusion_matrix):
 			TP_FN += confusion_matrix[i][j]
 			TP_FP += confusion_matrix[j][i]
 		# determine precision, recall, f1-score
-		precision[i] = TP / TP_FP
-		recall[i] = TP / TP_FN
-		f1[i] = (2 * precision[i] * recall[i]) / (precision[i] + recall[i])
+		precision[i] = 0 if TP == 0 else TP / TP_FP
+		recall[i] = 0 if TP == 0 else TP / TP_FN
+		if precision[i] == 0 and recall[i] == 0:
+			f1[i] = 0
+		else:
+			f1[i] = (2 * precision[i] * recall[i]) / (precision[i] + recall[i])
 	# determine macro-averaged f1-score
 	macro_f1 = sum(f1) / k
 	# return f1 and macro-f1 score
@@ -286,12 +424,11 @@ def main():
 	X_test, Y_test, summary_test = parse_json(test_filename)
 	# switch on parts
 	if part_num == 'a':
-		# preprocess input data, not using summary
+		# preprocess (simple) input data, not using summary
 		X_train = preprocess(X_train)
 		X_test = preprocess(X_test)
-		# create vocabulary and store it in a file
+		# create vocabulary
 		V, size = create_vocabulary(X_train)
-		json.dump(V, open("vocab_1.txt", "w"))
 		# train model
 		phi, theta, majority_class = naive_bayes_train(X_train, Y_train, V, size)
 		# test model on training set
@@ -326,28 +463,60 @@ def main():
 		phi, theta, majority_class = naive_bayes_train(X_train, Y_train, V, size)
 		# test model on test set, find confusion matrixs
 		accuracy, confusion_matrix = naive_bayes_test(X_test, Y_test, V, phi, theta)
-		print("Confusion matrix:")
-		print(confusion_matrix)
-		# save confusion matrix in a file
-		file = open("Q1_confusion.txt", "w")
-		file.write('Confusion matrix in case of NB classification (no stopword removal or stemming)\n')
-		file.write('(Rows represent actual rating (1-5) and columns represent predicted rating (1-5))\n')
-		file.write(str(confusion_matrix))
-		# close file
-		file.close()
+		# plot and save confusion matrix
+		df_cm = pd.DataFrame(confusion_matrix, range(1, 6), range(1, 6))
+		plt.figure(1)	
+		sns_plot = sns.heatmap(df_cm, annot=True, fmt='g', annot_kws={"size": 8})
+		plt.savefig("Q1_cm.png")
+		print("Confusion Matrix saved as Q1_cm.png")
 	elif part_num == 'd':
 		# stopword removal and stemming
 		# preprocess input data, not using summary 
 		X_train = preprocess_advanced(X_train)
 		X_test = preprocess_advanced(X_test)
-		# create vocabulary and store it in a file
+		# create vocabulary
 		V, size = create_vocabulary(X_train)
-		json.dump(V, open("vocab_2.txt", "w"))
 		# train model
 		phi, theta, majority_class = naive_bayes_train(X_train, Y_train, V, size)
 		# test model on test set
 		accuracy, confusion_matrix = naive_bayes_test(X_test, Y_test, V, phi, theta)
 		print("Test accuracy (in %): " + str(accuracy))
+		# determine macro-f1 score on test data
+		f1, macro_f1 = f1_score(confusion_matrix)
+		print("Macro F1-score: " + str(macro_f1))
+		# print f1-score per class
+		for i in range(5):
+			print("F1-score for class " + str(i + 1) + ": " + str(f1[i]))
+	elif part_num == 'e':
+		# stopword removal and stemming
+		# preprocess input data, not using summary 
+		print("Processing training set")
+		X_train = preprocess_advanced(X_train, True)
+		print("Generating unigram vocabulary")
+		# create unigram vocabulary
+		V_unigram, size_u = create_vocabulary(X_train)
+		# train model and find unigram priors
+		print("Training unigram naive bayes")
+		phi, theta, majority_class = naive_bayes_train(X_train, Y_train, V_unigram, size_u)
+		# generate bigrams
+		print("Generating bigrams")
+		X_train_bigrams = bigram_generator(X_train)
+		# create bigram vocabulary
+		print("Generating bigram vocabulary")
+		V_bigram, size_b = create_vocabulary(X_train_bigrams, True)
+		# determine bigram probabilities
+		print("Determining bigram probabilities")
+		bigram_prob = bigram_probabilities(X_train_bigrams, Y_train, V_bigram, V_unigram)
+		# test model on test set
+		print("Processing test set")
+		X_test = preprocess_advanced(X_test, True)
+		# create bigrams
+		print("Generating bigrams")
+		X_test_bigrams = bigram_generator(X_test)
+		print("Testing")
+		accuracy, confusion_matrix = bigram_naive_bayes_test(X_test_bigrams, X_test, Y_test, V_bigram, V_unigram, phi, theta, bigram_prob)
+		print("Test accuracy (in %): " + str(accuracy))
+		print(confusion_matrix)
 		# determine macro-f1 score on test data
 		f1, macro_f1 = f1_score(confusion_matrix)
 		print("Macro F1-score: " + str(macro_f1))
@@ -362,9 +531,8 @@ def main():
 		X_test = preprocess_advanced(X_test)
 		summary_test = preprocess_advanced(summary_test)
 		X_test = extend_data(X_test, summary_test)
-		# create vocabulary and store it in a file
+		# create vocabulary
 		V, size = create_vocabulary(X_train)
-		json.dump(V, open("vocab_3.txt", "w"))
 		# train model
 		phi, theta, majority_class = naive_bayes_train(X_train, Y_train, V, size)
 		# test model on test set
