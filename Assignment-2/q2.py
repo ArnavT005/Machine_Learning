@@ -96,7 +96,7 @@ def svm_train_binary_linear_CVXOPT(X, Y, class_num, C):
 	temp = X_y.T @ X_y
 	P = matrix(temp, tc='d')
 	# solve the dual optimization (minimization) problem
-	solution = solvers.qp(P, q, G, h, A, b)
+	solution = solvers.qp(P, q, G, h, A, b, options={'show_progress': False})
 	# extract optimal value of alpha (column vector)
 	alpha = np.array(solution['x'])
 	# determine support vectors (alpha > 1e-4)
@@ -127,7 +127,8 @@ def svm_train_binary_linear_CVXOPT(X, Y, class_num, C):
 # class_num: class number that needs to be treated as -1, other class will be 1
 # C: model hyperparameter
 # gamma: kernel parameter
-def svm_train_binary_gaussian_CVXOPT(X, Y, class_num, C, gamma):
+# threshold: support vector threshold
+def svm_train_binary_gaussian_CVXOPT(X, Y, class_num, C, gamma, threshold=1e-3):
 	# store shape of training data
 	m, n = X.shape
 	# update class labels to -1 and 1
@@ -171,14 +172,14 @@ def svm_train_binary_gaussian_CVXOPT(X, Y, class_num, C, gamma):
 	# convert to matrix
 	P = matrix(temp_4, tc='d')
 	# solve the dual optimization (minimization) problem
-	solution = solvers.qp(P, q, G, h, A, b)
+	solution = solvers.qp(P, q, G, h, A, b, options={'show_progress': False})
 	# extract optimal value of alpha (column vector)
 	alpha = np.array(solution['x'])
-	# determine support vectors (alpha > 1e-3)
+	# determine support vectors (alpha > threshold)
 	support_vectors_indices = []
 	for i in range(m):
 		# non-zero coefficient
-		if alpha[i][0] > 1.2e-3:
+		if alpha[i][0] > threshold:
 			support_vectors_indices.append(i)
 	# slice alpha, X and Y to get support vectors
 	support_vectors_alpha = alpha[support_vectors_indices, :]
@@ -413,7 +414,7 @@ def svm_train_binary_gaussian_LIBSVM(X, Y, class_num, C, gamma):
 			# other class (change to 1)
 			Y[i][0] = 1
 	# learn SVM model (gaussian kernel, C, gamma)
-	model = svm_train(Y.reshape(-1), X, '-t 2 -c ' + str(C) + ' -g ' + str(gamma))
+	model = svm_train(Y.reshape(-1), X, '-t 2 -q -c ' + str(C) + ' -g ' + str(gamma))
 	# return learnt model
 	return model
 
@@ -424,7 +425,7 @@ def svm_train_binary_gaussian_LIBSVM(X, Y, class_num, C, gamma):
 # gamma: kernel parameter
 def svm_train_multi_gaussian_LIBSVM(X, Y, C, gamma):
 	# learn SVM model (gaussian kernel, C, gamma)
-	model = svm_train(Y.reshape(-1), X, '-s 0 -t 2 -c ' + str(C) + ' -g ' + str(gamma))
+	model = svm_train(Y.reshape(-1), X, '-s 0 -t 2 -q -c ' + str(C) + ' -g ' + str(gamma))
 	# return learnt model
 	return model
 
@@ -471,53 +472,24 @@ def svm_test_multi_LIBSVM(X, Y, model):
 def cross_validation(K, X_train, Y_train, C, gamma, X_test, Y_test):
 	# store the shape of training data
 	m, n = X_train.shape
-	# list of indices
-	indices = [i for i in range(m)]
-	# randomly shuffle indices and training data
-	random.shuffle(indices)
-	X_train = X_train[indices, :]
-	Y_train = Y_train[indices, :]
-	# divide the training data into K-folds
-	index_list = []
-	for i in range(K):
-		if i + 1 != K:
-			index_list.append([j for j in range(i * (m // K), (i + 1) * (m // K))])
-		else:
-			index_list.append([j for j in range(i * (m // K), m)])
 	# validation accuracy per C
 	validation_accuracy = [0 for i in range(len(C))]
 	# test accuracy per C
 	test_accuracy = [0 for i in range(len(C))]
 	# loop through values of C
 	for i in range(len(C)):
-		# cross-validation accuracy and best model
-		accuracy = 0
-		best_model = None
-		for j in range(K):
-			# j^th partition is the validation set
-			X_validation = X_train[index_list[j], :]
-			Y_validation = Y_train[index_list[j], :]
-			# use remaining as training set
-			X = np.delete(X_train, index_list[j], axis=0)
-			Y = np.delete(Y_train, index_list[j], axis=0)
-			# train multi-class classification model (SVM)
-			model = svm_train_multi_gaussian_LIBSVM(X.copy(), Y.copy(), C[i], gamma)
-			# determine validation accuracy
-			p_labs, p_acc, p_vals = svm_test_multi_LIBSVM(X_validation.copy(), Y_validation.copy(), model)
-			if p_acc[0] > accuracy:
-				accuracy = p_acc[0]
-				best_model = model
-		# add accuracy to validation_accuracy
-		validation_accuracy[i] = accuracy
-		# determine accuracy on test set
-		p_labs, p_acc, p_vals = svm_test_multi_LIBSVM(X_test.copy(), Y_test.copy(), best_model)
-		# add accuracy to test_accuracy
+		# determine cross-validation accuracy (-v flag)
+		validation_accuracy[i] = svm_train(Y_train.reshape(-1), X_train, '-s 0 -t 2 -v ' + str(K) + ' -c ' + str(C[i]) + ' -g ' + str(gamma))	
+		# determine test-set accuracy
+		model = svm_train_multi_gaussian_LIBSVM(X_train.copy(), Y_train.copy(), C[i], gamma)
+		# predict on test set
+		p_labs, p_acc, p_vals = svm_test_multi_LIBSVM(X_test.copy(), Y_test.copy(), model)
 		test_accuracy[i] = p_acc[0]
 	# return cross-validation and test accuracies
 	return validation_accuracy, test_accuracy
 
 
-## MISCELLANEOUS FUNCTION ##
+## MISCELLANEOUS FUNCTIONS ##
 
 # function to visualize a 28 by 28 numpy array
 # X: numpy array (784 by 1)
@@ -562,7 +534,8 @@ def f1_score(confusion_matrix):
 	# return f1 and macro-f1 score
 	return f1, macro_f1
 
-## EXECUTION FUNCTIONS ##
+
+## EXECUTION FUNCTION ##
 
 # driver function (main)
 def main():
@@ -587,8 +560,8 @@ def main():
 	if not is_multi:
 		# last digit of entry number=4 (2019CS10424)
 		# filter training/test data for classes 4 and 5
-		X_train, Y_train = filter_data(X_train, Y_train, [4, 5])
-		X_test, Y_test = filter_data(X_test, Y_test, [4, 5])
+		X_train, Y_train = filter_data(X_train, Y_train, [8, 9])
+		X_test, Y_test = filter_data(X_test, Y_test, [8, 9])
 		# switch on parts
 		if part_num == 'a':
 			# use linear kernel (CVXOPT)
@@ -624,7 +597,7 @@ def main():
 			# use gaussian kernel (CVXOPT)
 			# get support vectors
 			start_time = time.time()
-			SV_indices, SV_alpha, SV_x, SV_y = svm_train_binary_gaussian_CVXOPT(X_train.copy(), Y_train.copy(), 4, 1, 0.05)
+			SV_indices, SV_alpha, SV_x, SV_y = svm_train_binary_gaussian_CVXOPT(X_train.copy(), Y_train.copy(), 8, 1, 0.05, 1.2e-3)
 			end_time = time.time()
 			# determine SV coefficients
 			SV_coeff = SV_alpha * SV_y
@@ -633,7 +606,7 @@ def main():
 			print("SV indices in X: " + str(SV_indices))
 			print("SV coefficients (transpose): " + str((SV_coeff.T)[0]))
 			# test model on training set
-			accuracy, confusion_matrix = svm_test_binary_gaussian_CVXOPT(X_train.copy(), Y_train.copy(), 4, 5, SV_alpha, SV_x, SV_y, 0.05)
+			accuracy, confusion_matrix = svm_test_binary_gaussian_CVXOPT(X_train.copy(), Y_train.copy(), 8, 9, SV_alpha, SV_x, SV_y, 0.05)
 			print("Training accuracy (in %): " + str(accuracy))
 			# determine macro-f1 score on training data
 			f1, macro_f1 = f1_score(confusion_matrix)
@@ -642,7 +615,7 @@ def main():
 			print("F1-score for class 4: " + str(f1[0]))
 			print("F1-score for class 5: " + str(f1[1]))
 			# test model on test set
-			accuracy, confusion_matrix = svm_test_binary_gaussian_CVXOPT(X_test.copy(), Y_test.copy(), 4, 5, SV_alpha, SV_x, SV_y, 0.05)
+			accuracy, confusion_matrix = svm_test_binary_gaussian_CVXOPT(X_test.copy(), Y_test.copy(), 8, 9, SV_alpha, SV_x, SV_y, 0.05)
 			print("Test accuracy (in %): " + str(accuracy))
 			# determine macro-f1 score on test data
 			f1, macro_f1 = f1_score(confusion_matrix)
@@ -693,6 +666,7 @@ def main():
 					else:
 						confusion_matrix[1][1] += 1
 			# determine macro-f1 score on training data
+			print(confusion_matrix)
 			f1, macro_f1 = f1_score(confusion_matrix)
 			print("Macro F1-score: " + str(macro_f1))
 			# print f1-score per class
@@ -717,6 +691,7 @@ def main():
 					else:
 						confusion_matrix[1][1] += 1
 			# determine macro-f1 score on test data
+			print(confusion_matrix)
 			f1, macro_f1 = f1_score(confusion_matrix)
 			print("Macro F1-score: " + str(macro_f1))
 			# print f1-score per class
@@ -754,6 +729,7 @@ def main():
 					else:
 						confusion_matrix[1][1] += 1
 			# determine macro-f1 score on training data
+			print(confusion_matrix)
 			f1, macro_f1 = f1_score(confusion_matrix)
 			print("Macro F1-score: " + str(macro_f1))
 			# print f1-score per class
@@ -778,6 +754,7 @@ def main():
 					else:
 						confusion_matrix[1][1] += 1
 			# determine macro-f1 score on test data
+			print(confusion_matrix)
 			f1, macro_f1 = f1_score(confusion_matrix)
 			print("Macro F1-score: " + str(macro_f1))
 			# print f1-score per class
@@ -788,10 +765,13 @@ def main():
 		# switch on parts
 		if part_num == 'a':
 			# use gaussian kernel (CVXOPT)
+			start_time = time.time()
 			SV_indices, SV_coeff, SV_x, SV_y = svm_train_multi_gaussian_CVXOPT(X_train.copy(), Y_train.copy(), 10, 1, 0.05)
+			end_time = time.time()
+			print("Training time (in s): " + str(end_time - start_time))
 			# test model on training data
 			accuracy, confusion_matrix = svm_test_multi_gaussian_CVXOPT(X_train.copy(), Y_train.copy(), SV_coeff, SV_x, SV_y, 0.05)
-			print("Test accuracy (in %): " + str(accuracy))
+			print("Training accuracy (in %): " + str(accuracy))
 			# determine macro-f1 score on training data
 			f1, macro_f1 = f1_score(confusion_matrix)
 			print("Macro F1-score: " + str(macro_f1))
@@ -903,7 +883,7 @@ def main():
 		elif part_num == 'd':
 			# perform cross-validation
 			# list of C values that need to be tried
-			C = [1e-5, 1e-3, 1, 5, 10]
+			C = [0.00001, 0.001, 1, 5, 10]
 			# determine cross-validation and test-accuracies
 			validation_accuracy, test_accuracy = cross_validation(5, X_train.copy(), Y_train.copy(), C, 0.05, X_test.copy(), Y_test.copy())
 			print("Cross-Validation accuracies (in %): " + str(validation_accuracy))

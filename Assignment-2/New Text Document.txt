@@ -1,8 +1,0 @@
-Cross-Validation accuracies (in %): [17.150000000000002, 17.150000000000002, 97.52499999999999, 97.625, 97.625]
-Test accuracies (in %): [19.48, 19.48, 97.0, 97.22, 97.22]
-
-(2aiiiL)
-Maximum element-wise difference in 'w': 0.0002981016893214006
-Difference in 'b': [0.00113479]
-(2aiiiG)
-Max element-wise diff (coeff): [0.00074583]

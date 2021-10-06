@@ -3,8 +3,8 @@ from collections import Counter
 import seaborn as sns
 import pandas as pd
 import numpy as np
-import string
 import random
+import pickle
 import json
 import nltk
 import sys
@@ -71,13 +71,17 @@ def preprocess_advanced(X, punctuation=False):
 			# check if word is void of punctuations
 			# only store alphabetical words (no numerics or alphanumerics)
 			if word.isalpha():
+				weight = 1
+				if word.isupper():
+					weight = 3
 				# convert word to lower case
 				word = word.lower()
 				# stem word
 				word = stemmer.stem(word)
 				# append word into X_ list (only if it is not a stop word)
 				if word not in stop_words:
-					X_[i].append(word)
+					for j in range(weight):
+						X_[i].append(word)
 			elif punctuation:
 				# check for exclamation/question mark
 				if word == '!' or word == '?':
@@ -111,14 +115,14 @@ def extend_data(X, summary):
 			X[i].extend(summary[i])
 			continue
 		if num_words_S != 0:
-			for j in range(num_words_X // (min(20 * num_words_S, num_words_X))):
+			for j in range(num_words_X // (min(8 * num_words_S, num_words_X))):
 				X[i].extend(summary[i])
 	# return the extended data
 	return X
 
 # create and return vocabulary (V)
 # X is the list of texts (input data)
-# bigrams: flag that tells if bigram naive bayes is being used
+# bigrams: flag that tells if a bigram vocabulary is being created
 def create_vocabulary(X, bigrams=False):
 	# initialise vocabulary (dictionary)
 	V, size = {}, 0
@@ -313,17 +317,6 @@ def bigram_naive_bayes_test(X_bigram, X_unigram, Y, V_bigram, V_unigram, phi, th
 						# bigram is (UNKNOWN, UNKNOWN), add log(P(UNKNOWN|y=k))
 						bigram_index = V_bigram[('UNKNOWN', 'UNKNOWN')]
 						temp_value += np.log(bigram_prob[k][bigram_index - 1])
-				# go through all words in example i
-				for word in X_unigram[i]:
-					if word in V_unigram.keys():
-						# get word index
-						word_index = V_unigram[word]
-						# add to temp value
-						temp_value += np.log(theta[k][word_index - 1])
-					else:
-						# word is UNKNOWN, add log(P(UNKNOWN|y=k))
-						word_index = V_unigram['UNKNOWN']
-						temp_value += np.log(theta[k][word_index - 1])
 			# check if it is the maximum value
 			if max_class == 0:
 				max_value = temp_value
@@ -345,6 +338,8 @@ def bigram_naive_bayes_test(X_bigram, X_unigram, Y, V_bigram, V_unigram, phi, th
 def random_test(Y):
 	# number of test examples
 	m = len(Y)
+	# initialise confusion matrix
+	confusion_matrix = np.zeros((5, 5))
 	# go through all examples (predict randomly)
 	# count accuracy = (correct predictions) / m
 	accuracy_count = 0
@@ -352,8 +347,10 @@ def random_test(Y):
 		prediction = random.choice([1, 2, 3, 4, 5])
 		if Y[i] == prediction:
 			accuracy_count += 1
-	# return accuracy = (accuracy_count / m) * 100
-	return (accuracy_count * 100) / m
+		# increment appropriate entry
+		confusion_matrix[Y[i] - 1][prediction - 1] += 1
+	# return accuracy = (accuracy_count / m) * 100 and confusion matrix
+	return (accuracy_count * 100) / m, confusion_matrix
 
 # function to give majority predictions on test data
 # Y: test data (output, review rating)
@@ -361,14 +358,18 @@ def random_test(Y):
 def majority_test(Y, majority_class):
 	# number of test examples
 	m = len(Y)
+	# initialise confusion matrix
+	confusion_matrix = np.zeros((5, 5))
 	# go through all examples (predict majority)
 	# count accuracy = (accuracy_count / m) * 100
 	accuracy_count = 0
 	for i in range(m):
 		if Y[i] == majority_class:
 			accuracy_count += 1
-	# return accuracy = (accuracy_count / m) * 100
-	return (accuracy_count * 100) / m
+		# increment appropriate entry
+		confusion_matrix[Y[i] - 1][majority_class - 1] += 1
+	# return accuracy = (accuracy_count / m) * 100 and confusion matrix
+	return (accuracy_count * 100) / m, confusion_matrix
 
 # function to compute F1-score (macro, per-class)
 # confusion_matrix: confusion matrix for the data
@@ -447,11 +448,23 @@ def main():
 		# determine majority class in training data
 		majority_class, count = Counter(Y_train).most_common()[0]
 		# determine majority accuracy
-		accuracy = majority_test(Y_test, majority_class)
+		accuracy, confusion_matrix = majority_test(Y_test, majority_class)
 		print("Majority accuracy (in %): " + str(accuracy))
+		# determine macro-f1 score on test data
+		f1, macro_f1 = f1_score(confusion_matrix)
+		print("Macro F1-score: " + str(macro_f1))
+		# print f1-score per class
+		for i in range(5):
+			print("F1-score for class " + str(i + 1) + ": " + str(f1[i]))
 		# determine random accuracy
-		accuracy = random_test(Y_test)
+		accuracy, confusion_matrix = random_test(Y_test)
 		print("Random accuracy (in %): " + str(accuracy))
+		# determine macro-f1 score on test data
+		f1, macro_f1 = f1_score(confusion_matrix)
+		print("Macro F1-score: " + str(macro_f1))
+		# print f1-score per class
+		for i in range(5):
+			print("F1-score for class " + str(i + 1) + ": " + str(f1[i]))
 	elif part_num == 'c':
 		# draw confusion matrix
 		# first train and test data
@@ -491,8 +504,12 @@ def main():
 		# stopword removal and stemming
 		# preprocess input data, not using summary 
 		print("Processing training set")
-		X_train = preprocess_advanced(X_train, True)
+		X_train = preprocess_advanced(X_train)
+		with open("process_train_caps", "wb") as f:
+			pickle.dump(X_train, f)
 		print("Generating unigram vocabulary")
+		# with open("process_train", "rb") as f:
+		# 	X_train = pickle.load(f)
 		# create unigram vocabulary
 		V_unigram, size_u = create_vocabulary(X_train)
 		# train model and find unigram priors
@@ -509,7 +526,11 @@ def main():
 		bigram_prob = bigram_probabilities(X_train_bigrams, Y_train, V_bigram, V_unigram)
 		# test model on test set
 		print("Processing test set")
-		X_test = preprocess_advanced(X_test, True)
+		X_test = preprocess_advanced(X_test)
+		with open("process_test_caps", "wb") as f:
+			pickle.dump(X_test, f)
+		# with open("process_test", "rb") as f:
+		# 	X_test = pickle.load(f)
 		# create bigrams
 		print("Generating bigrams")
 		X_test_bigrams = bigram_generator(X_test)
@@ -525,11 +546,14 @@ def main():
 			print("F1-score for class " + str(i + 1) + ": " + str(f1[i]))
 	elif part_num == 'g':
 		# incorporate summary into training data
-		X_train = preprocess_advanced(X_train)
-		summary_train = preprocess_advanced(summary_train)
+		X_train = preprocess(X_train)
+		summary_train = preprocess(summary_train)
+		# extend training data by including summarized review
+		# summary is given more weight, as it is kind of a broad description of the entire review
 		X_train = extend_data(X_train, summary_train)
-		X_test = preprocess_advanced(X_test)
-		summary_test = preprocess_advanced(summary_test)
+		# process test data in similar fashion
+		X_test = preprocess(X_test)
+		summary_test = preprocess(summary_test)
 		X_test = extend_data(X_test, summary_test)
 		# create vocabulary
 		V, size = create_vocabulary(X_train)
