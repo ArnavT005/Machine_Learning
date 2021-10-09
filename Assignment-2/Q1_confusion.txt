@@ -1,7 +1,0 @@
-Confusion matrix in case of NB classification (no stopword removal or stemming)
-(Rows represent actual rating (1-5) and columns represent predicted rating (1-5))
-41	6	48	35	98	
-8	4	72	116	126	
-4	5	139	490	448	
-13	10	129	973	1983	
-55	38	165	962	8032	
