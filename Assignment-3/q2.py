@@ -65,12 +65,19 @@ def decode_output(Y):
 def sigmoid(Z):
 	return 1 / (1 + np.exp(-Z))
 
+# function to return ReLU of a matrix
+# Z: matrix
+def ReLU(Z):
+	return np.maximum(0, Z)
+
 # function to perform forward propagation
 # X: training data
 # A: list of activated layer-output vectors
 # Z: list of layer-output vectors
 # theta: layer parameters
-def forward_propagation(X, A, Z, theta):
+# code: code of the activation function used for hidden-layers
+#		0 for sigmoid (default), 1 for ReLU
+def forward_propagation(X, A, Z, theta, code=0):
 	# store number of layers
 	num_layers = len(Z)
 	# store number of rows in input data
@@ -82,7 +89,17 @@ def forward_propagation(X, A, Z, theta):
 		# determine layer-output matrix using activated output of previous layer
 		Z[i] = A[i - 1] @ theta[i].T
 		# determine activated output
-		A[i] = np.column_stack((np.ones((m, 1)), sigmoid(Z[i])))
+		if i == num_layers - 1:
+			# output layer (use sigmoid)
+			A[i] = np.column_stack((np.ones((m, 1)), sigmoid(Z[i])))
+		else:
+			# hidden layer (use code value)
+			if code == 0:
+				# use sigmoid
+				A[i] = np.column_stack((np.ones((m, 1)), sigmoid(Z[i])))
+			else:
+				# use ReLU
+				A[i] = np.column_stack((np.ones((m, 1)), ReLU(Z[i])))
 	# forward propagation complete, return
 	return
 
@@ -94,7 +111,9 @@ def forward_propagation(X, A, Z, theta):
 # theta: layer parameters
 # grad_t: theta gradients
 # grad_z: Z gradients
-def backward_propagation(X, Y, A, Z, theta, grad_t, grad_z):
+# code: code of the activation function used for hidden-layers
+#		0 for sigmoid (default), 1 for ReLU
+def backward_propagation(X, Y, A, Z, theta, grad_t, grad_z, code=0):
 	# store number of layers
 	num_layers = len(Z)
 	# store number of rows in input data
@@ -106,7 +125,12 @@ def backward_propagation(X, Y, A, Z, theta, grad_t, grad_z):
 	grad_t[num_layers - 1] = grad_z[num_layers - 1].T @ A[num_layers - 2]
 	# perform backward-propagation
 	for j in reversed(range(1, num_layers - 1)):
-		temp = A[j] * (1 - A[j]) * (grad_z[j + 1] @ theta[j + 1])
+		if code == 0:
+			# use sigmoid derivative
+			temp = A[j] * (1 - A[j]) * (grad_z[j + 1] @ theta[j + 1])
+		else:
+			# use ReLU derivative (0 at 0 assumption)
+			temp = (A[j] > 0) * (grad_z[j + 1] @ theta[j + 1])
 		grad_z[j] = temp[:, 1:]
 		grad_t[j] = grad_z[j].T @ A[j - 1]
 	# all gradients calculated, return
@@ -121,7 +145,9 @@ def backward_propagation(X, Y, A, Z, theta, grad_t, grad_z):
 # r: number of target classes
 # eta: learning rate
 # eps: stopping threshold
-def neural_network(X, Y, M, hidden_layers, r, eta, eps):
+# code: code of the activation function used for hidden-layers
+#		0 for sigmoid (default), 1 for ReLU
+def neural_network(X, Y, M, hidden_layers, r, eta, eps, code):
 	# store shape of input
 	m, n = X.shape
 	# total number of layers (include input/output layer)
@@ -141,7 +167,7 @@ def neural_network(X, Y, M, hidden_layers, r, eta, eps):
 	grad_t = [None for i in range(num_layers)]
 	grad_z = [None for i in range(num_layers)]
 	# perform forward-propagation
-	forward_propagation(X, A, Z, theta)
+	forward_propagation(X, A, Z, theta, code)
 	# determine initial cost
 	Y_hat = sigmoid(Z[num_layers - 1])
 	diff = Y - Y_hat
@@ -165,14 +191,14 @@ def neural_network(X, Y, M, hidden_layers, r, eta, eps):
 				Y_mini = Y[(b * M):((b + 1) * M), :]
 				row_count = M
 			# perform forward-propagation
-			forward_propagation(X_mini, A, Z, theta)
+			forward_propagation(X_mini, A, Z, theta, code)
 			# perform back-propagation
-			backward_propagation(X_mini, Y_mini, A, Z, theta, grad_t, grad_z)
+			backward_propagation(X_mini, Y_mini, A, Z, theta, grad_t, grad_z, code)
 			# update parameters
 			for i in range(1, num_layers):
 				theta[i] -= eta * grad_t[i]
 			# compute cost
-			forward_propagation(X_mini, A, Z, theta)
+			forward_propagation(X_mini, A, Z, theta, code)
 			Y_hat_mini = sigmoid(Z[num_layers - 1])
 			diff_mini = Y_mini - Y_hat_mini
 			temp += np.sum(diff_mini ** 2) / (2 * row_count)
@@ -200,14 +226,14 @@ hidden_layers = [25]
 M = 100
 r = 10
 print("Training Started")
-theta = neural_network(X_train, Y_train, M, hidden_layers, r, eta, eps)
+theta = neural_network(X_train, Y_train, M, hidden_layers, r, eta, eps, 1)
 print("Network trained")
 data_set = parse_csv(file_test)
 X, Y = split_data(data_set)
 X_test, Y_test = encode_input(X), encode_output(Y)
 A = [None for i in range(3)]
 Z = [None for i in range(3)]
-forward_propagation(X_test, A, Z, theta)
+forward_propagation(X_test, A, Z, theta, 1)
 print("Making predictions")
 prediction = np.argmax(sigmoid(Z[2]), axis=1).reshape((X_test.shape[0], 1))
 print(prediction.shape)
