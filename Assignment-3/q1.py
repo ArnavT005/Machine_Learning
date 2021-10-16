@@ -6,7 +6,7 @@ import numpy as np
 # create Tree class (for decision tree nodes)
 class Tree:
     # constructor
-    def __init__(self, attr=-1, val=-1, children=[]):
+    def __init__(self, attr, val, children):
         self.attr = attr
         self.val = val
         self.children = children
@@ -38,7 +38,7 @@ def code(X, type):
     # store number of rows
     m = X.shape[0]
     # create new array
-    X_ = np.zeros((m, 1), dtype=np.int8)
+    X_ = np.zeros((m, 1))
     if type == "job":
         for i in range(m):
             if X[i][0] == 'admin.':
@@ -165,7 +165,7 @@ def one_hot_encoding(X, k):
     # go through all examples
     for i in range(m):
         # activate appropriate entry in X_
-        X_[i][X[i][0]] = 1
+        X_[i][int(X[i][0])] = 1
     # return encoded matrix
     return X_
 
@@ -222,11 +222,11 @@ def split_data(X, Y, attr_index, num_split, cat_range=0):
     X_list = []
     Y_list = []
     if num_split:
-        # binary split
+        # numeric attribute, binary split
         # find median value of 'attr_index' attribute
         median = np.median(X[:, attr_index].reshape(-1))
         # find examples strictly greater than the median
-        filter = (X[:, attr_index].reshape(-1) > median)
+        filter = (X[:, attr_index] > median)
         # store data with attr_value <= median
         X_list.append(X[filter==False])
         Y_list.append(Y[filter==False])
@@ -273,7 +273,7 @@ def best_attribute_split(X, Y, num_attr, cat_attr):
             if prob == 0:
                 continue
             # compute H(y|X=x)
-            one_count = np.sum(Y_list[i], axis=0)
+            one_count = np.sum(Y_list[i], axis=0)[0]
             # check for zero entropy
             if one_count == 0 or one_count == temp:
                 continue
@@ -295,11 +295,11 @@ def best_attribute_split(X, Y, num_attr, cat_attr):
 # Y: incoming output (training data)
 # num_attr: set of attribute indices with numeric values
 # cat_attr: dictionary containing range of categorical attributes
-def decision_tree(X, Y, num_attr, cat_attr):
+def decision_tree(X, Y, num_attr, cat_attr, cutoff=False):
     # store number of examples
     m = X.shape[0]
     # determine number of examples of class 1
-    checksum = np.sum(Y, axis=0)
+    checksum = np.sum(Y, axis=0)[0]
     # return leaf-node with majority class, if data set is empty
     if m == 0:
         if checksum > m - checksum:
@@ -323,10 +323,15 @@ def decision_tree(X, Y, num_attr, cat_attr):
         return node
     # else, the data is not homogeneous and not empty
     # create internal node
-    node = Tree()
+    node = Tree(-1, -1, [])
     # choose an attribute to split on
     attr_index = best_attribute_split(X, Y, num_attr, cat_attr)
+    # set node attribute
+    node.setAttribute(attr_index)
     if attr_index in num_attr:
+        # find median value, and set it as node value
+        median = np.median(X[:, attr_index].reshape(-1))
+        node.setValue(median)
         # attribute is numeric, perform 2-way split on median
         X_list, Y_list = split_data(X, Y, attr_index, True)
         # create sub-trees
@@ -341,8 +346,59 @@ def decision_tree(X, Y, num_attr, cat_attr):
     # return the node created
     return node    
 
+# function to traverse decision tree for a given example
+# tree: decision tree
+# X: example
+# num_attr: set of attribute indices with numeric values
+def traverse_tree(tree, X, num_attr):
+    # check if it is a leaf node
+    if tree.isLeaf():
+        return tree.getValue()
+    # else, it is an internal node
+    # get attribute index and child nodes
+    attr_index = tree.getAttribute()
+    children = tree.getChildren()
+    if attr_index in num_attr:
+        # numeric attribute, split on value (median)
+        if X[attr_index] > tree.getValue():
+            # traverse right sub-tree
+            return traverse_tree(children[1], X, num_attr)
+        else:
+            # traverse left sub-tree
+            return traverse_tree(children[0], X, num_attr)
+    else:
+        # categorical attribute
+        # traverse sub-tree corresponding to X[attr_index]
+        return traverse_tree(children[int(X[attr_index])], X, num_attr) 
+
+# function to test decision tree model
+# tree: decision tree
+# X: test data (input)
+# Y: test data (output)
+# num_attr: set of attribute indices with numeric values
+def test_tree(tree, X, Y, num_attr):
+    # store number of examples
+    m = X.shape[0]
+    # initialize accuracy to zero
+    accuracy = 0
+    # go through every example
+    for i in range(m):
+        # make prediction by traversing tree
+        prediction = traverse_tree(tree, X[i, :], num_attr)
+        if prediction == Y[i][0]:
+            # increment accuracy
+            accuracy += 1
+    # return test accuracy
+    return (accuracy * 100) / m
+        
+
 
 X, X_hot, Y = parse_csv("bank_train.csv")
 num_attr = set([0, 5, 9, 11, 12, 13, 14])
 cat_attr = {1: 12, 2: 4, 3: 4, 4: 3, 6: 3, 7: 3, 8: 3, 10: 12, 15: 4}
 tree = decision_tree(X, Y, num_attr, cat_attr)
+
+
+X_test, X_test_hot, Y_test = parse_csv("bank_train.csv")
+accuracy = test_tree(tree, X_test, Y_test, num_attr)
+print(accuracy)
