@@ -1,4 +1,3 @@
-from numpy.lib.shape_base import split
 import pandas as pd
 import numpy as np
 
@@ -6,27 +5,48 @@ import numpy as np
 # create Tree class (for decision tree nodes)
 class Tree:
     # constructor
-    def __init__(self, attr, val, children):
+    def __init__(self, attr, val, parent, children):
         self.attr = attr
         self.val = val
+        self.parent = parent
         self.children = children
+        self.most_common = -1
+        self.child_index = -1
     # get methods
     def getValue(self):
         return self.val
     def getAttribute(self):
         return self.attr
+    def getParent(self):
+        return self.parent
     def getChildren(self):
         return self.children
+    def getCommon(self):
+        return self.most_common
+    def getIndex(self):
+        return self.child_index
     # set methods
     def setValue(self, val):
         self.val = val
     def setAttribute(self, attr):
         self.attr = attr
+    def setParent(self, parent):
+        self.parent = parent
     def addChild(self, child):
         self.children.append(child)
+    def setCommon(self, most_common):
+        self.most_common = most_common
+    def setIndex(self, index):
+        self.child_index = index
     # method to check for leaf node
     def isLeaf(self):
         if self.children == []:
+            return True
+        else:
+            return False
+    # method to check for root node
+    def isRoot(self):
+        if self.parent == None:
             return True
         else:
             return False
@@ -295,7 +315,7 @@ def best_attribute_split(X, Y, num_attr, cat_attr):
 # Y: incoming output (training data)
 # num_attr: set of attribute indices with numeric values
 # cat_attr: dictionary containing range of categorical attributes
-def decision_tree(X, Y, num_attr, cat_attr, cutoff=False):
+def decision_tree(X, Y, num_attr, cat_attr):
     # store number of examples
     m = X.shape[0]
     # determine number of examples of class 1
@@ -304,26 +324,35 @@ def decision_tree(X, Y, num_attr, cat_attr, cutoff=False):
     if m == 0:
         if checksum > m - checksum:
             # majority class is '1'
-            node = Tree(-1, 1, [])
+            node = Tree(-1, 1, None, [])
+            node.setCommon(1)
             return node
         else:
             # majority class is '0'
-            node = Tree(-1, 0, [])
+            node = Tree(-1, 0, None, [])
+            node.setCommon(0)
             return node
     # check if data is homogeneous
     if checksum == 0:
         # all examples have zero output
         # return a leaf node (val=0)
-        node = Tree(-1, 0, [])
+        node = Tree(-1, 0, None, [])
+        node.setCommon(0)
         return node
     elif checksum == m:
         # all examples have 'one' output
         # return a leaf node (val=1)
-        node = Tree(-1, 1, [])
+        node = Tree(-1, 1, None, [])
+        node.setCommon(1)
         return node
     # else, the data is not homogeneous and not empty
     # create internal node
-    node = Tree(-1, -1, [])
+    node = Tree(-1, -1, None, [])
+    # set most-common class (used later in post-pruning)
+    if checksum > m - checksum:
+        node.setCommon(1)
+    else:
+        node.setCommon(0)
     # choose an attribute to split on
     attr_index = best_attribute_split(X, Y, num_attr, cat_attr)
     # set node attribute
@@ -336,13 +365,19 @@ def decision_tree(X, Y, num_attr, cat_attr, cutoff=False):
         X_list, Y_list = split_data(X, Y, attr_index, True)
         # create sub-trees
         for i in range(len(X_list)):
-            node.addChild(decision_tree(X_list[i], Y_list[i], num_attr, cat_attr))
+            child = decision_tree(X_list[i], Y_list[i], num_attr, cat_attr)
+            child.setParent(node)
+            child.setIndex(i)
+            node.addChild(child)
     else:
         # attribute is categorical, perform split on every feature value
         X_list, Y_list = split_data(X, Y, attr_index, False, cat_attr[attr_index])
         # create sub-trees
         for i in range(len(X_list)):
-            node.addChild(decision_tree(X_list[i], Y_list[i], num_attr, cat_attr))
+            child = decision_tree(X_list[i], Y_list[i], num_attr, cat_attr)
+            child.setParent(node)
+            child.setIndex(i)
+            node.addChild(child)
     # return the node created
     return node    
 
@@ -350,10 +385,15 @@ def decision_tree(X, Y, num_attr, cat_attr, cutoff=False):
 # tree: decision tree
 # X: example
 # num_attr: set of attribute indices with numeric values
-def traverse_tree(tree, X, num_attr):
+# node: node to be pruned
+def traverse_tree(tree, X, num_attr, node=None):
     # check if it is a leaf node
     if tree.isLeaf():
         return tree.getValue()
+    # check if it is the node to be pruned
+    if tree == node:
+        # return most common output
+        return tree.getCommon()
     # else, it is an internal node
     # get attribute index and child nodes
     attr_index = tree.getAttribute()
@@ -362,21 +402,22 @@ def traverse_tree(tree, X, num_attr):
         # numeric attribute, split on value (median)
         if X[attr_index] > tree.getValue():
             # traverse right sub-tree
-            return traverse_tree(children[1], X, num_attr)
+            return traverse_tree(children[1], X, num_attr, node)
         else:
             # traverse left sub-tree
-            return traverse_tree(children[0], X, num_attr)
+            return traverse_tree(children[0], X, num_attr, node)
     else:
         # categorical attribute
         # traverse sub-tree corresponding to X[attr_index]
-        return traverse_tree(children[int(X[attr_index])], X, num_attr) 
+        return traverse_tree(children[int(X[attr_index])], X, num_attr, node) 
 
 # function to test decision tree model
 # tree: decision tree
 # X: test data (input)
 # Y: test data (output)
 # num_attr: set of attribute indices with numeric values
-def test_tree(tree, X, Y, num_attr):
+# node: node to be pruned
+def test_tree(tree, X, Y, num_attr, node=None):
     # store number of examples
     m = X.shape[0]
     # initialize accuracy to zero
@@ -384,21 +425,122 @@ def test_tree(tree, X, Y, num_attr):
     # go through every example
     for i in range(m):
         # make prediction by traversing tree
-        prediction = traverse_tree(tree, X[i, :], num_attr)
+        prediction = traverse_tree(tree, X[i, :], num_attr, node)
         if prediction == Y[i][0]:
             # increment accuracy
             accuracy += 1
     # return test accuracy
     return (accuracy * 100) / m
-        
 
+# function to perform level-order traversal of a decision tree
+# tree: decision tree
+def level_order_traversal(tree):
+    # initialise node-list
+    node_list = []
+    # use lists for traversal
+    curr_level = [tree]
+    next_level = []
+    while curr_level != []:    
+        while curr_level != []:
+            node = curr_level.pop()
+            # check for leaf node
+            if node.isLeaf():
+                continue
+            # else, store it in list
+            node_list.append(node)
+            # append children to next_level
+            children = node.getChildren()
+            for child in children:
+                next_level.append(child)
+        # make next level the current level
+        curr_level = next_level
+        next_level = []
+    # return node list
+    return node_list
+
+# function to post-prune a decision tree to avoid overfitting (reduced error pruning)
+# tree: decision tree
+# X: validation data (input)
+# Y: validation data (output)
+# num_attr: set of attribute indices with numeric values
+def post_prune_tree(tree, X, Y, num_attr):
+    # create dummy node, used as leaf node during pruning
+    leaf = Tree(-1, -1, None, [])
+    iter = 0
+    # perform pruning till harmful
+    # while True:
+    iter += 1
+    # compute pre-prune validation accuracy
+    # pre_prune_accuracy = test_tree(tree, X, Y, num_attr)
+    # get node list
+    node_list = list(reversed(level_order_traversal(tree)))
+    # iterate and prune, if improvement
+    for node in node_list:
+        pre_prune_accuracy = test_tree(tree, X, Y, num_attr)
+        accuracy = test_tree(tree, X, Y, num_attr, node)
+        # update max accuracy and node
+        if accuracy >= pre_prune_accuracy:
+            # prune node
+            new_node = Tree(-1, -1, None, [])
+            new_node.setValue(node.getCommon())
+            if node.isRoot():
+                # prune root
+                tree = new_node
+            else:
+                # get parent and index
+                node_parent = node.getParent()
+                index = node.getIndex()
+                # set parent and index
+                new_node.setParent(node_parent)
+                new_node.setIndex(index)
+                # set child
+                node_parent.children[index] = new_node
+                # remove parent
+                node.setParent(None)
+        # # choose the node whose pruning leads to maximum increase
+        # max_node = None
+        # max_accuracy = 0
+        # for node in node_list:
+        #     # determine post-prune accuracy
+        #     accuracy = test_tree(tree, X, Y, num_attr, node)
+        #     # update max accuracy and node
+        #     if accuracy >= pre_prune_accuracy and accuracy > max_accuracy:
+        #         print(accuracy)
+        #         max_accuracy = accuracy
+        #         max_node = node
+        # print("Hello " + str(iter))
+        # if max_node == None:
+        #     # no helpful pruning possible
+        #     break
+        # # prune max node
+        # new_node = Tree(-1, -1, None, [])
+        # new_node.setValue(max_node.getCommon())
+        # if max_node.isRoot():
+        #     # prune root
+        #     tree = new_node
+        # else:
+        #     # get parent and index
+        #     node_parent = max_node.getParent()
+        #     index = max_node.getIndex()
+        #     # set parent and index
+        #     new_node.setParent(node_parent)
+        #     new_node.setIndex(index)
+        #     # set child
+        #     node_parent.children[index] = new_node
+        #     # remove parent
+        #     max_node.setParent(None)
+    # tree is suitably pruned
+    return tree
 
 X, X_hot, Y = parse_csv("bank_train.csv")
 num_attr = set([0, 5, 9, 11, 12, 13, 14])
 cat_attr = {1: 12, 2: 4, 3: 4, 4: 3, 6: 3, 7: 3, 8: 3, 10: 12, 15: 4}
 tree = decision_tree(X, Y, num_attr, cat_attr)
 
-
-X_test, X_test_hot, Y_test = parse_csv("bank_train.csv")
+X_test, X_test_hot, Y_test = parse_csv("bank_val.csv")
+tree = post_prune_tree(tree, X_test, Y_test, num_attr)
+X_test, X_test_hot, Y_test = parse_csv("bank_test.csv")
 accuracy = test_tree(tree, X_test, Y_test, num_attr)
 print(accuracy)
+
+
