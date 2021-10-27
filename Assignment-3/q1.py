@@ -1,6 +1,10 @@
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-
+import json
+import sys
 
 # create Tree class (for decision tree nodes)
 class Tree:
@@ -176,7 +180,7 @@ def code(X, type):
 
 # function to give one-hot encoding for a feature vector (column)
 # X: column vector (numpy array) (integer coded)
-# k: range of values (0-k)
+# k: range of values (0 - (k - 1))
 def one_hot_encoding(X, k):
     # store number of rows in X
     m = X.shape[0]
@@ -241,6 +245,8 @@ def split_data(X, Y, attr_index, num_split, cat_range=0):
     # create lists
     X_list = []
     Y_list = []
+    m = X.shape[0]
+    sum = 0
     if num_split:
         # numeric attribute, binary split
         # find median value of 'attr_index' attribute
@@ -253,6 +259,7 @@ def split_data(X, Y, attr_index, num_split, cat_range=0):
         # store data with attr_value > median
         X_list.append(X[filter])
         Y_list.append(Y[filter])
+        sum += len(X_list[0]) + len(X_list[1])
     else:
         # cat_range-way split
         for i in range(cat_range):
@@ -261,6 +268,8 @@ def split_data(X, Y, attr_index, num_split, cat_range=0):
             # store data with attr_value = i    
             X_list.append(X[filter])
             Y_list.append(Y[filter])
+            sum += len(X_list[i])
+    assert m == sum
     # return data lists
     return X_list, Y_list
 
@@ -297,8 +306,8 @@ def best_attribute_split(X, Y, num_attr, cat_attr):
             # check for zero entropy
             if one_count == 0 or one_count == temp:
                 continue
-            h = (one_count / temp) * np.log(temp / one_count) + (1 - one_count / temp) * np.log(temp / (temp - one_count))
-            # add to entropy
+            h = (one_count / temp) * np.log(temp / one_count) + ((temp - one_count) / temp) * np.log(temp / (temp - one_count))
+            # add to entropy (after prior multiplication)
             entropy += (h * prob)
         # check for minimum entropy
         if min_index == -1:
@@ -315,24 +324,17 @@ def best_attribute_split(X, Y, num_attr, cat_attr):
 # Y: incoming output (training data)
 # num_attr: set of attribute indices with numeric values
 # cat_attr: dictionary containing range of categorical attributes
-def decision_tree(X, Y, num_attr, cat_attr):
+# curr_depth: depth of data in decison tree
+# max_depth: maximum depth of any leaf node, -1 indicates infinity
+def decision_tree(X, Y, num_attr, cat_attr, curr_depth, max_depth=-1):
     # store number of examples
     m = X.shape[0]
-    # determine number of examples of class 1
-    checksum = np.sum(Y, axis=0)[0]
-    # return leaf-node with majority class, if data set is empty
+    # return None, if data set is empty
     if m == 0:
-        if checksum > m - checksum:
-            # majority class is '1'
-            node = Tree(-1, 1, None, [])
-            node.setCommon(1)
-            return node
-        else:
-            # majority class is '0'
-            node = Tree(-1, 0, None, [])
-            node.setCommon(0)
-            return node
-    # check if data is homogeneous
+        return None
+    # data not empty, determine number of examples of class 1
+    checksum = np.sum(Y, axis=0)[0]
+    # check if data is homogeneous/pure
     if checksum == 0:
         # all examples have zero output
         # return a leaf node (val=0)
@@ -345,7 +347,19 @@ def decision_tree(X, Y, num_attr, cat_attr):
         node = Tree(-1, 1, None, [])
         node.setCommon(1)
         return node
-    # else, the data is not homogeneous and not empty
+    if curr_depth == max_depth:
+        # max_depth reached, return leaf node with majority value
+        if checksum > m - checksum:
+            # 1 is the majority class
+            node = Tree(-1, 1, None, [])
+            node.setCommon(1)
+            return node
+        else:
+            # 0 is the majority class
+            node = Tree(-1, 0, None, [])
+            node.setCommon(0)
+            return node
+    # else, the data is not homogeneous and not empty, and max_depth is not reached
     # create internal node
     node = Tree(-1, -1, None, [])
     # set most-common class (used later in post-pruning)
@@ -358,26 +372,44 @@ def decision_tree(X, Y, num_attr, cat_attr):
     # set node attribute
     node.setAttribute(attr_index)
     if attr_index in num_attr:
+        # attribute is numeric, perform 2-way split on median
+        X_list, Y_list = split_data(X, Y, attr_index, True)
         # find median value, and set it as node value
         median = np.median(X[:, attr_index].reshape(-1))
         node.setValue(median)
-        # attribute is numeric, perform 2-way split on median
-        X_list, Y_list = split_data(X, Y, attr_index, True)
         # create sub-trees
         for i in range(len(X_list)):
-            child = decision_tree(X_list[i], Y_list[i], num_attr, cat_attr)
-            child.setParent(node)
-            child.setIndex(i)
-            node.addChild(child)
+            if X_list[i].shape[0] == 0:
+                # no data for this split, create majority leaf
+                child = Tree(-1, node.getCommon(), None, [])
+                child.setCommon(node.getCommon())
+                child.setParent(node)
+                child.setIndex(i)
+                node.addChild(child)
+            else:
+                # build children recursively
+                child = decision_tree(X_list[i], Y_list[i], num_attr, cat_attr, curr_depth + 1, max_depth)
+                child.setParent(node)
+                child.setIndex(i)
+                node.addChild(child)
     else:
         # attribute is categorical, perform split on every feature value
         X_list, Y_list = split_data(X, Y, attr_index, False, cat_attr[attr_index])
         # create sub-trees
         for i in range(len(X_list)):
-            child = decision_tree(X_list[i], Y_list[i], num_attr, cat_attr)
-            child.setParent(node)
-            child.setIndex(i)
-            node.addChild(child)
+            if X_list[i].shape[0] == 0:
+                # no data for this split, create majority leaf
+                child = Tree(-1, node.getCommon(), None, [])
+                child.setCommon(node.getCommon())
+                child.setParent(node)
+                child.setIndex(i)
+                node.addChild(child)
+            else:
+                # build children recursively
+                child = decision_tree(X_list[i], Y_list[i], num_attr, cat_attr, curr_depth + 1, max_depth)
+                child.setParent(node)
+                child.setIndex(i)
+                node.addChild(child)
     # return the node created
     return node    
 
@@ -437,6 +469,8 @@ def test_tree(tree, X, Y, num_attr, node=None):
 def level_order_traversal(tree):
     # initialise node-list
     node_list = []
+    # initialise leaf count
+    leaf_count = 0
     # use lists for traversal
     curr_level = [tree]
     next_level = []
@@ -445,6 +479,7 @@ def level_order_traversal(tree):
             node = curr_level.pop()
             # check for leaf node
             if node.isLeaf():
+                leaf_count += 1
                 continue
             # else, store it in list
             node_list.append(node)
@@ -455,34 +490,35 @@ def level_order_traversal(tree):
         # make next level the current level
         curr_level = next_level
         next_level = []
-    # return node list
-    return node_list
+    # return node list and leaf count
+    return node_list, leaf_count
 
 # function to post-prune a decision tree to avoid overfitting (reduced error pruning)
 # tree: decision tree
-# X: validation data (input)
-# Y: validation data (output)
+# X_train: train data (input)
+# Y_train: train data (output)
+# X_val: validation data (input)
+# Y_val: validation data (output)
+# X_test: test data (input)
+# Y_test: test data (output)
 # num_attr: set of attribute indices with numeric values
-def post_prune_tree(tree, X, Y, num_attr):
-    # create dummy node, used as leaf node during pruning
-    leaf = Tree(-1, -1, None, [])
-    iter = 0
-    # perform pruning till harmful
-    # while True:
-    iter += 1
-    # compute pre-prune validation accuracy
-    # pre_prune_accuracy = test_tree(tree, X, Y, num_attr)
-    # get node list
-    node_list = list(reversed(level_order_traversal(tree)))
+# node_list: list of tree nodes in bottom-up manner
+# num_nodes_internal: list of number of internal nodes
+# num_nodes_total: list of total number of nodes
+# train_accuracy: list of training accuracy values
+# val_accuracy: list of validation accuracy values
+# test_accuracy: list of test accuracy values
+def post_prune_tree(tree, X_train, Y_train, X_val, Y_val, X_test, Y_test, num_attr, node_list, num_nodes_internal, num_nodes_total, train_accuracy, val_accuracy, test_accuracy):
     # iterate and prune, if improvement
     for node in node_list:
-        pre_prune_accuracy = test_tree(tree, X, Y, num_attr)
-        accuracy = test_tree(tree, X, Y, num_attr, node)
-        # update max accuracy and node
-        if accuracy >= pre_prune_accuracy:
+        pre_prune_accuracy = test_tree(tree, X_val, Y_val, num_attr)
+        post_prune_accuracy = test_tree(tree, X_val, Y_val, num_attr, node)
+        # prune node if post accuracy is at least as much as pre accuracy
+        if post_prune_accuracy >= pre_prune_accuracy:
             # prune node
             new_node = Tree(-1, -1, None, [])
             new_node.setValue(node.getCommon())
+            new_node.setCommon(node.getCommon())
             if node.isRoot():
                 # prune root
                 tree = new_node
@@ -495,52 +531,302 @@ def post_prune_tree(tree, X, Y, num_attr):
                 new_node.setIndex(index)
                 # set child
                 node_parent.children[index] = new_node
-                # remove parent
+                # remove old node from tree
                 node.setParent(None)
-        # # choose the node whose pruning leads to maximum increase
-        # max_node = None
-        # max_accuracy = 0
-        # for node in node_list:
-        #     # determine post-prune accuracy
-        #     accuracy = test_tree(tree, X, Y, num_attr, node)
-        #     # update max accuracy and node
-        #     if accuracy >= pre_prune_accuracy and accuracy > max_accuracy:
-        #         print(accuracy)
-        #         max_accuracy = accuracy
-        #         max_node = node
-        # print("Hello " + str(iter))
-        # if max_node == None:
-        #     # no helpful pruning possible
-        #     break
-        # # prune max node
-        # new_node = Tree(-1, -1, None, [])
-        # new_node.setValue(max_node.getCommon())
-        # if max_node.isRoot():
-        #     # prune root
-        #     tree = new_node
-        # else:
-        #     # get parent and index
-        #     node_parent = max_node.getParent()
-        #     index = max_node.getIndex()
-        #     # set parent and index
-        #     new_node.setParent(node_parent)
-        #     new_node.setIndex(index)
-        #     # set child
-        #     node_parent.children[index] = new_node
-        #     # remove parent
-        #     max_node.setParent(None)
+            nodes, leaf_count = level_order_traversal(tree)
+            num_nodes_internal.append(len(nodes))
+            num_nodes_total.append(len(nodes) + leaf_count)
+            train_accuracy.append(test_tree(tree, X_train, Y_train, num_attr))
+            val_accuracy.append(post_prune_accuracy)
+            test_accuracy.append(test_tree(tree, X_test, Y_test, num_attr))
     # tree is suitably pruned
     return tree
 
-X, X_hot, Y = parse_csv("bank_train.csv")
-num_attr = set([0, 5, 9, 11, 12, 13, 14])
-cat_attr = {1: 12, 2: 4, 3: 4, 4: 3, 6: 3, 7: 3, 8: 3, 10: 12, 15: 4}
-tree = decision_tree(X, Y, num_attr, cat_attr)
+# scoring function used to find out-of-bag accuracy (for parameter tuning)
+# X: input data (one-hot encoded)
+# Y: output data (one-hot encoded)
+def oob_scorer(estimator, X, Y):
+    estimator.fit(X, Y)
+    return estimator.oob_score_
 
-X_test, X_test_hot, Y_test = parse_csv("bank_val.csv")
-tree = post_prune_tree(tree, X_test, Y_test, num_attr)
-X_test, X_test_hot, Y_test = parse_csv("bank_test.csv")
-accuracy = test_tree(tree, X_test, Y_test, num_attr)
-print(accuracy)
+# function to train a random forest using sklearn module and find best hyperparameter using GridSearch
+# X_train: training data (input)
+# Y_train: training data (output)
+# all data is one-hot encoded
+# param_grid: parameter grid over which the search is to be conducted
+def random_forest_tuning(X_train, Y_train, param_grid):
+    # define estimator object (multi-processing)
+    forest = RandomForestClassifier(criterion='entropy', oob_score=True, n_jobs=-1)
+    # create grid search object (5-fold cross validation)
+    clf = GridSearchCV(forest, param_grid, scoring=oob_scorer, n_jobs=-1, verbose=4)
+    # fit estimator using all available options and find the best fit (parameters)
+    clf.fit(X_train, Y_train.reshape(-1))
+    # return the best parameters and the estimator learnt using these params
+    return clf.best_params_, clf.best_estimator_
 
+# driver function
+def main():
+    # get file names
+    file_train = sys.argv[1]
+    file_test = sys.argv[2]
+    file_val = sys.argv[3]
+    # load data (both normal and one-hot encoded)
+    X_train, X_train_hot, Y_train = parse_csv(file_train)
+    X_val, X_val_hot, Y_val = parse_csv(file_val)
+    X_test, X_test_hot, Y_test = parse_csv(file_test)
+    # get part number
+    part_num = sys.argv[4]
+    # define tree related constants (like which attributes are numerical, range of categorical data etc.)
+    # for normal encoding
+    num_attr = set([0, 5, 9, 11, 12, 13, 14])
+    cat_attr = {1: 12, 2: 4, 3: 4, 4: 3, 6: 3, 7: 3, 8: 3, 10: 12, 15: 4}
+    # for one-hot encoding
+    num_attr_hot = set([0, 24, 34, 47, 48, 49, 50])
+    cat_attr_hot = {1: 2, 2: 2, 3: 2, 4: 2, 5: 2, 6: 2, 7: 2, 8: 2, 9: 2, 10: 2, 11: 2, 12: 2, 13: 2, 14: 2, 15: 2, 16: 2, 17: 2, 18: 2, 
+                    19: 2, 20: 2, 21: 2, 22: 2, 23: 2, 25: 2, 26: 2, 27: 2, 28: 2, 29: 2, 30: 2, 31: 2, 32: 2, 33: 2, 35: 2, 36: 2, 37: 2, 
+                    38: 2, 39: 2, 40: 2, 41: 2, 42: 2, 43: 2, 44: 2, 45: 2, 46: 2, 51: 2, 52: 2, 53: 2, 54: 2}
+    # define parameter grid, for part 'c' and 'd'
+    param_grid = {
+        'n_estimators': [50, 150, 250, 350, 450],
+        'max_features': [0.1, 0.3, 0.5, 0.7, 0.9],
+        'min_samples_split': [2, 4, 6, 8, 10]
+    }
+    if part_num == 'a':
+        # construct a decision tree using both normal and one-hot encodings
+        # calculate train/val/test accuracy as a normal-tree is grown
+        depth = [i for i in range(20)]
+        num_nodes_total = []
+        num_nodes_internal = []
+        train_accuracy, val_accuracy, test_accuracy = [], [], []
+        for d in depth:
+            tree = decision_tree(X_train, Y_train, num_attr, cat_attr, 0, d)
+            node_list, leaf_count = level_order_traversal(tree)
+            num_nodes_internal.append(len(node_list))
+            num_nodes_total.append(len(node_list) + leaf_count)
+            train_accuracy.append(test_tree(tree, X_train, Y_train, num_attr))
+            val_accuracy.append(test_tree(tree, X_val, Y_val, num_attr))
+            test_accuracy.append(test_tree(tree, X_test, Y_test, num_attr))
+        # print final accuracies
+        print("Without using one-hot encoding:")
+        print("Training Accuracy (in %): " + str(train_accuracy[-1]))
+        print("Validation Accuracy (in %): " + str(val_accuracy[-1]))
+        print("Test Accuracy (in %): " + str(test_accuracy[-1]))
+        # plot graphs
+        plt.figure(1)
+        plt.plot(num_nodes_internal, train_accuracy, label='Training accuracy')
+        plt.plot(num_nodes_internal, val_accuracy, label='Validation accuracy')
+        plt.plot(num_nodes_internal, test_accuracy, label='Test accuracy')
+        plt.xlabel("Number of decision (internal) nodes")
+        plt.ylabel("Prediction accuracy (in %)")
+        plt.legend()
+        plt.savefig("accuracy_internal.png")
+        plt.figure(2)
+        plt.plot(num_nodes_total, train_accuracy, label='Training accuracy')
+        plt.plot(num_nodes_total, val_accuracy, label='Validation accuracy')
+        plt.plot(num_nodes_total, test_accuracy, label='Test accuracy')
+        plt.xlabel("Total number of nodes")
+        plt.ylabel("Prediction accuracy (in %)")
+        plt.legend()
+        plt.savefig("accuracy_total.png")
+        # calculate train/val/test accuracy as a one-hot-encoded-tree is grown
+        depth = [i for i in range(36)]
+        num_nodes_internal_hot = []
+        num_nodes_total_hot = []
+        train_accuracy_hot, val_accuracy_hot, test_accuracy_hot = [], [], []
+        for d in depth:
+            tree_hot = decision_tree(X_train_hot, Y_train, num_attr_hot, cat_attr_hot, 0, d)
+            node_list, leaf_count = level_order_traversal(tree_hot)
+            num_nodes_internal_hot.append(len(node_list))
+            num_nodes_total_hot.append(len(node_list) + leaf_count)
+            train_accuracy_hot.append(test_tree(tree_hot, X_train_hot, Y_train, num_attr_hot))
+            val_accuracy_hot.append(test_tree(tree_hot, X_val_hot, Y_val, num_attr_hot))
+            test_accuracy_hot.append(test_tree(tree_hot, X_test_hot, Y_test, num_attr_hot))
+        # print final accuracies
+        print("Using one-hot encoding:")
+        print("Training Accuracy (in %): " + str(train_accuracy_hot[-1]))
+        print("Validation Accuracy (in %): " + str(val_accuracy_hot[-1]))
+        print("Test Accuracy (in %): " + str(test_accuracy_hot[-1]))
+        # plot graphs
+        plt.figure(3)
+        plt.plot(num_nodes_internal_hot, train_accuracy_hot, label='Training accuracy')
+        plt.plot(num_nodes_internal_hot, val_accuracy_hot, label='Validation accuracy')
+        plt.plot(num_nodes_internal_hot, test_accuracy_hot, label='Test accuracy')
+        plt.xlabel("Number of decision (internal) nodes")
+        plt.ylabel("Prediction accuracy (in %)")
+        plt.legend()
+        plt.savefig("accuracy_internal_hot.png")
+        plt.figure(4)
+        plt.plot(num_nodes_total_hot, train_accuracy_hot, label='Training accuracy')
+        plt.plot(num_nodes_total_hot, val_accuracy_hot, label='Validation accuracy')
+        plt.plot(num_nodes_total_hot, test_accuracy_hot, label='Test accuracy')
+        plt.xlabel("Total number of nodes")
+        plt.ylabel("Prediction accuracy (in %)")
+        plt.legend()
+        plt.savefig("accuracy_total_hot.png")
+    elif part_num == 'b':
+        # first grow trees using both normal and one-hot encoding
+        # without using one-hot encoding
+        tree = decision_tree(X_train, Y_train, num_attr, cat_attr, 0)
+        node_list, leaf_count = level_order_traversal(tree)
+        node_list = list(reversed(node_list))
+        num_nodes_internal = [len(node_list)]
+        num_nodes_total = [len(node_list) + leaf_count]
+        train_accuracy = [test_tree(tree, X_train, Y_train, num_attr)]
+        val_accuracy = [test_tree(tree, X_val, Y_val, num_attr)]
+        test_accuracy = [test_tree(tree, X_test, Y_test, num_attr)]
+        # prune tree
+        tree = post_prune_tree(tree, X_train, Y_train, X_val, Y_val, X_test, Y_test, num_attr, node_list, num_nodes_internal, num_nodes_total, train_accuracy, val_accuracy, test_accuracy)
+        # print final accuracies
+        print("Without using one-hot encoding:")
+        print("Training Accuracy (in %): " + str(train_accuracy[-1]))
+        print("Validation Accuracy (in %): " + str(val_accuracy[-1]))
+        print("Test Accuracy (in %): " + str(test_accuracy[-1]))
+        # plot graphs
+        plt.figure(1)
+        plt.plot(num_nodes_internal, train_accuracy, label='Training accuracy')
+        plt.plot(num_nodes_internal, val_accuracy, label='Validation accuracy')
+        plt.plot(num_nodes_internal, test_accuracy, label='Test accuracy')
+        plt.xlabel("Number of decision (internal) nodes")
+        plt.ylabel("Prediction accuracy (in %)")
+        plt.legend()
+        plt.savefig("prune_accuracy_internal.png")
+        plt.figure(2)
+        plt.plot(num_nodes_total, train_accuracy, label='Training accuracy')
+        plt.plot(num_nodes_total, val_accuracy, label='Validation accuracy')
+        plt.plot(num_nodes_total, test_accuracy, label='Test accuracy')
+        plt.xlabel("Total number of nodes")
+        plt.ylabel("Prediction accuracy (in %)")
+        plt.legend()
+        plt.savefig("prune_accuracy_total.png")
+        # using one-hot encoding
+        tree_hot = decision_tree(X_train_hot, Y_train, num_attr_hot, cat_attr_hot, 0)
+        node_list, leaf_count = level_order_traversal(tree_hot)
+        node_list = list(reversed(node_list))
+        num_nodes_internal_hot = [len(node_list)]
+        num_nodes_total_hot = [len(node_list) + leaf_count]
+        train_accuracy_hot = [test_tree(tree_hot, X_train_hot, Y_train, num_attr_hot)]
+        val_accuracy_hot = [test_tree(tree_hot, X_val_hot, Y_val, num_attr_hot)]
+        test_accuracy_hot = [test_tree(tree_hot, X_test_hot, Y_test, num_attr_hot)]
+        # prune tree
+        tree_hot = post_prune_tree(tree_hot, X_train_hot, Y_train, X_val_hot, Y_val, X_test_hot, Y_test, num_attr_hot, node_list, num_nodes_internal_hot, num_nodes_total_hot, train_accuracy_hot, val_accuracy_hot, test_accuracy_hot)
+        # print final accuracies
+        print("Using one-hot encoding:")
+        print("Training Accuracy (in %): " + str(train_accuracy_hot[-1]))
+        print("Validation Accuracy (in %): " + str(val_accuracy_hot[-1]))
+        print("Test Accuracy (in %): " + str(test_accuracy_hot[-1]))
+        # plot graphs
+        plt.figure(3)
+        plt.plot(num_nodes_internal_hot, train_accuracy_hot, label='Training accuracy')
+        plt.plot(num_nodes_internal_hot, val_accuracy_hot, label='Validation accuracy')
+        plt.plot(num_nodes_internal_hot, test_accuracy_hot, label='Test accuracy')
+        plt.xlabel("Number of decision (internal) nodes")
+        plt.ylabel("Prediction accuracy (in %)")
+        plt.legend()
+        plt.savefig("prune_accuracy_internal_hot.png")
+        plt.figure(4)
+        plt.plot(num_nodes_total_hot, train_accuracy_hot, label='Training accuracy')
+        plt.plot(num_nodes_total_hot, val_accuracy_hot, label='Validation accuracy')
+        plt.plot(num_nodes_total_hot, test_accuracy_hot, label='Test accuracy')
+        plt.xlabel("Total number of nodes")
+        plt.ylabel("Prediction accuracy (in %)")
+        plt.legend()
+        plt.savefig("prune_accuracy_total_hot.png")
+    elif part_num == 'c':
+        best_params, best_estimator = random_forest_tuning(X_train_hot, Y_train, param_grid)
+        # write best parameters to a json file, so that these can be used for parameter sensitivity analysis
+        with open("params.json", 'w') as file:
+            json.dump(best_params, file)
+            file.write('\n')
+        file.close()
+        # print best parameters found
+        print("Best n_estimators: " + str(best_params['n_estimators']))
+        print("Best max_features: " + str(best_params['max_features']))
+        print("Best min_samples_split: " + str(best_params['min_samples_split']))
+        # report out-of-bag accuracy
+        print("Out-of-Bag accuracy: (in %)" + str(best_estimator.oob_score_ * 100))
+        # do prediction on training set
+        Y_predict = best_estimator.predict(X_train_hot).reshape((-1, 1))
+        accuracy = np.sum((Y_predict == Y_train) * 1) / X_train_hot.shape[0]
+        print("Training Accuracy (in %): " + str(accuracy * 100))
+        Y_predict = best_estimator.predict(X_val_hot).reshape((-1, 1))
+        accuracy = np.sum((Y_predict == Y_val) * 1) / X_val_hot.shape[0]
+        print("Validation Accuracy (in %): " + str(accuracy * 100))
+        Y_predict = best_estimator.predict(X_test_hot).reshape((-1, 1))
+        accuracy = np.sum((Y_predict == Y_test) * 1) / X_test_hot.shape[0]
+        print("Test Accuracy (in %): " + str(accuracy * 100))
+    elif part_num == 'd':
+        # load best parameters
+        with open("params.json", 'r') as file:
+            best_params = json.load(file) 
+        best_n_estimators = best_params['n_estimators']
+        best_max_features = best_params['max_features']
+        best_min_samples_split = best_params['min_samples_split']
+        # parameter sensitivity analysis
+        # changing n_estimators
+        val_list, test_list = [], []
+        oob_list = []
+        for param in param_grid['n_estimators']:
+            # train forest
+            forest = RandomForestClassifier(n_estimators=param, criterion='entropy', min_samples_split=best_min_samples_split, max_features=best_max_features, oob_score=True, n_jobs=-1)
+            forest.fit(X_train_hot, Y_train.reshape(-1))
+            # determine validation accuracy
+            Y_predict = forest.predict(X_val_hot).reshape((-1, 1))
+            accuracy = np.sum((Y_predict == Y_val) * 1) / X_val_hot.shape[0]
+            val_list.append(accuracy * 100)
+            # determine test accuracy
+            Y_predict = forest.predict(X_test_hot).reshape((-1, 1))
+            accuracy = np.sum((Y_predict == Y_test) * 1) / X_test_hot.shape[0]
+            test_list.append(accuracy * 100)
+        # plot graph
+        plt.figure(1)
+        plt.plot(param_grid['n_estimators'], val_list, label='Validation Accuracy')
+        plt.plot(param_grid['n_estimators'], test_list, label='Test Accuracy')
+        plt.xlabel("Value (n_estimators)")
+        plt.ylabel("Prediction Accuracy (in %)")
+        plt.legend()
+        plt.savefig("n_estimators_sensitivity.png")
+        # changing max_features
+        val_list, test_list = [], []
+        for param in param_grid['max_features']:
+            # train forest
+            forest = RandomForestClassifier(n_estimators=best_n_estimators, criterion='entropy', min_samples_split=best_min_samples_split, max_features=param, oob_score=True, n_jobs=-1)
+            forest.fit(X_train_hot, Y_train.reshape(-1))
+            # determine validation accuracy
+            Y_predict = forest.predict(X_val_hot).reshape((-1, 1))
+            accuracy = np.sum((Y_predict == Y_val) * 1) / X_val_hot.shape[0]
+            val_list.append(accuracy * 100)
+            # determine test accuracy
+            Y_predict = forest.predict(X_test_hot).reshape((-1, 1))
+            accuracy = np.sum((Y_predict == Y_test) * 1) / X_test_hot.shape[0]
+            test_list.append(accuracy * 100)
+        # plot graph
+        plt.figure(2)
+        plt.plot(param_grid['max_features'], val_list, label='Validation Accuracy')
+        plt.plot(param_grid['max_features'], test_list, label='Test Accuracy')
+        plt.xlabel("Value (max_features)")
+        plt.ylabel("Prediction Accuracy (in %)")
+        plt.legend()
+        plt.savefig("max_features_sensitivity.png")
+        # changing min_samples_split
+        val_list, test_list = [], []
+        for param in param_grid['min_samples_split']:
+            # train forest
+            forest = RandomForestClassifier(n_estimators=best_n_estimators, criterion='entropy', min_samples_split=param, max_features=best_max_features, oob_score=True, n_jobs=-1)
+            forest.fit(X_train_hot, Y_train.reshape(-1))
+            # determine validation accuracy
+            Y_predict = forest.predict(X_val_hot).reshape((-1, 1))
+            accuracy = np.sum((Y_predict == Y_val) * 1) / X_val_hot.shape[0]
+            val_list.append(accuracy * 100)
+            # determine test accuracy
+            Y_predict = forest.predict(X_test_hot).reshape((-1, 1))
+            accuracy = np.sum((Y_predict == Y_test) * 1) / X_test_hot.shape[0]
+            test_list.append(accuracy * 100)
+        plt.figure(3)
+        plt.plot(param_grid['min_samples_split'], val_list, label='Validation Accuracy')
+        plt.plot(param_grid['min_samples_split'], test_list, label='Test Accuracy')
+        plt.xlabel("Value (min_samples_split)")
+        plt.ylabel("Prediction Accuracy (in %)")
+        plt.legend()
+        plt.savefig("min_samples_split_sensitivity.png")
 
+main()         
