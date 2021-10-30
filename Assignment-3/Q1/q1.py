@@ -558,7 +558,7 @@ def random_forest_tuning(X_train, Y_train, param_grid):
     # define estimator object (multi-processing)
     forest = RandomForestClassifier(criterion='entropy', oob_score=True, n_jobs=-1)
     # create grid search object (5-fold cross validation)
-    clf = GridSearchCV(forest, param_grid, scoring=oob_scorer, n_jobs=-1, verbose=4)
+    clf = GridSearchCV(forest, param_grid, scoring=oob_scorer, n_jobs=-1)
     # fit estimator using all available options and find the best fit (parameters)
     clf.fit(X_train, Y_train.reshape(-1))
     # return the best parameters and the estimator learnt using these params
@@ -763,12 +763,15 @@ def main():
         best_min_samples_split = best_params['min_samples_split']
         # parameter sensitivity analysis
         # changing n_estimators
+        min_value, max_value = 100, 0
         val_list, test_list = [], []
         oob_list = []
         for param in param_grid['n_estimators']:
             # train forest
             forest = RandomForestClassifier(n_estimators=param, criterion='entropy', min_samples_split=best_min_samples_split, max_features=best_max_features, oob_score=True, n_jobs=-1)
             forest.fit(X_train_hot, Y_train.reshape(-1))
+            # determine oob_score
+            oob_list.append(forest.oob_score_ * 100)
             # determine validation accuracy
             Y_predict = forest.predict(X_val_hot).reshape((-1, 1))
             accuracy = np.sum((Y_predict == Y_val) * 1) / X_val_hot.shape[0]
@@ -781,16 +784,32 @@ def main():
         plt.figure(1)
         plt.plot(param_grid['n_estimators'], val_list, label='Validation Accuracy')
         plt.plot(param_grid['n_estimators'], test_list, label='Test Accuracy')
+        plt.plot(param_grid['n_estimators'], oob_list, label='OOB Score')
+        min_value = min(min_value, min(oob_list))
+        min_value = min(min_value, min(val_list))
+        min_value = min(min_value, min(test_list))
+        max_value = max(max_value, max(oob_list))
+        max_value = max(max_value, max(val_list))
+        max_value = max(max_value, max(test_list))
+        ticks = [min_value, max_value]
+        plt.plot(param_grid['n_estimators'], [min_value for _ in range(5)], linestyle='--')
+        plt.plot(param_grid['n_estimators'], [max_value for _ in range(5)], linestyle='--')
         plt.xlabel("Value (n_estimators)")
         plt.ylabel("Prediction Accuracy (in %)")
+        plt.yticks(list(plt.yticks()[0]) + ticks)
         plt.legend()
         plt.savefig("n_estimators_sensitivity.png")
+        print("Graph saved as n_estimators_sensitivity.png")
         # changing max_features
+        min_value, max_value = 100, 0
         val_list, test_list = [], []
+        oob_list = []
         for param in param_grid['max_features']:
             # train forest
             forest = RandomForestClassifier(n_estimators=best_n_estimators, criterion='entropy', min_samples_split=best_min_samples_split, max_features=param, oob_score=True, n_jobs=-1)
             forest.fit(X_train_hot, Y_train.reshape(-1))
+            # determine oob_score
+            oob_list.append(forest.oob_score_ * 100)
             # determine validation accuracy
             Y_predict = forest.predict(X_val_hot).reshape((-1, 1))
             accuracy = np.sum((Y_predict == Y_val) * 1) / X_val_hot.shape[0]
@@ -803,16 +822,32 @@ def main():
         plt.figure(2)
         plt.plot(param_grid['max_features'], val_list, label='Validation Accuracy')
         plt.plot(param_grid['max_features'], test_list, label='Test Accuracy')
+        plt.plot(param_grid['max_features'], oob_list, label='OOB Score')
+        min_value = min(min_value, min(oob_list))
+        min_value = min(min_value, min(val_list))
+        min_value = min(min_value, min(test_list))
+        max_value = max(max_value, max(oob_list))
+        max_value = max(max_value, max(val_list))
+        max_value = max(max_value, max(test_list))
+        ticks = [min_value, max_value]
+        plt.plot(param_grid['max_features'], [min_value for _ in range(5)], linestyle='--')
+        plt.plot(param_grid['max_features'], [max_value for _ in range(5)], linestyle='--')
         plt.xlabel("Value (max_features)")
         plt.ylabel("Prediction Accuracy (in %)")
+        plt.yticks(list(plt.yticks()[0]) + ticks)
         plt.legend()
         plt.savefig("max_features_sensitivity.png")
+        print("Graph saved as max_features_sensitivity.png")
         # changing min_samples_split
+        min_value, max_value = 100, 0
         val_list, test_list = [], []
+        oob_list = []
         for param in param_grid['min_samples_split']:
             # train forest
             forest = RandomForestClassifier(n_estimators=best_n_estimators, criterion='entropy', min_samples_split=param, max_features=best_max_features, oob_score=True, n_jobs=-1)
             forest.fit(X_train_hot, Y_train.reshape(-1))
+            # determine oob_score
+            oob_list.append(forest.oob_score_ * 100)
             # determine validation accuracy
             Y_predict = forest.predict(X_val_hot).reshape((-1, 1))
             accuracy = np.sum((Y_predict == Y_val) * 1) / X_val_hot.shape[0]
@@ -824,9 +859,21 @@ def main():
         plt.figure(3)
         plt.plot(param_grid['min_samples_split'], val_list, label='Validation Accuracy')
         plt.plot(param_grid['min_samples_split'], test_list, label='Test Accuracy')
+        plt.plot(param_grid['min_samples_split'], oob_list, label='OOB Score')
+        min_value = min(min_value, min(oob_list))
+        min_value = min(min_value, min(val_list))
+        min_value = min(min_value, min(test_list))
+        max_value = max(max_value, max(oob_list))
+        max_value = max(max_value, max(val_list))
+        max_value = max(max_value, max(test_list))
+        ticks = [min_value, max_value]
+        plt.plot(param_grid['min_samples_split'], [min_value for _ in range(5)], linestyle='--')
+        plt.plot(param_grid['min_samples_split'], [max_value for _ in range(5)], linestyle='--')
         plt.xlabel("Value (min_samples_split)")
         plt.ylabel("Prediction Accuracy (in %)")
+        plt.yticks(list(plt.yticks()[0]) + ticks)
         plt.legend()
         plt.savefig("min_samples_split_sensitivity.png")
+        print("Graph saved as min_samples_split_sensitivity.png")
 
 main()         

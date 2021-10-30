@@ -1,0 +1,28 @@
+Part (a)
+Without using one-hot encoding:
+Training Accuracy (in %): 100.0
+Validation Accuracy (in %): 87.15170278637771
+Test Accuracy (in %): 87.14886087148861
+Using one-hot encoding:
+Training Accuracy (in %): 100.0
+Validation Accuracy (in %): 87.59398496240601
+Test Accuracy (in %): 87.03826587038266
+
+Part (b)
+Without using one-hot encoding:
+Training Accuracy (in %): 91.90168104401681
+Validation Accuracy (in %): 92.79080053073861
+Test Accuracy (in %): 89.49347489493475
+Using one-hot encoding:
+Training Accuracy (in %): 92.66202167662021
+Validation Accuracy (in %): 93.03405572755418
+Test Accuracy (in %): 89.1395708913957
+
+Part (c)
+Best n_estimators: 150
+Best max_features: 0.3
+Best min_samples_split: 10
+Out-of-Bag accuracy: (in %)90.7266091572661
+Training Accuracy (in %): 97.95399247953992
+Validation Accuracy (in %): 90.71207430340557
+Test Accuracy (in %): 89.98009289980094

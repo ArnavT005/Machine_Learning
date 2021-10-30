@@ -1,0 +1,59 @@
+Part (c)
+Number of hidden layer units: 5
+Training time (in s): 320.8039879798889
+Training Accuracy (in %): 67.44102359056377
+Test Accuracy (in %): 65.9775
+Number of hidden layer units: 10
+Training time (in s): 348.49889373779297
+Training Accuracy (in %): 83.50659736105558
+Test Accuracy (in %): 81.19189999999999
+Number of hidden layer units: 15
+Training time (in s): 360.0292429924011
+Training Accuracy (in %): 91.93922431027589
+Test Accuracy (in %): 91.2873
+Number of hidden layer units: 20
+Training time (in s): 406.30319809913635
+Training Accuracy (in %): 92.33106757297081
+Test Accuracy (in %): 92.19659999999999
+Number of hidden layer units: 25
+Training time (in s): 463.5871419906616
+Training Accuracy (in %): 92.31507397041183
+Test Accuracy (in %): 92.00500000000001
+
+Part (d)
+Number of hidden layer units: 5
+Training time (in s): 169.59088730812073
+Training Accuracy (in %): 65.38984406237505
+Test Accuracy (in %): 64.0299
+Number of hidden layer units: 10
+Training time (in s): 349.59820580482483
+Training Accuracy (in %): 81.98720511795283
+Test Accuracy (in %): 79.6401
+Number of hidden layer units: 15
+Training time (in s): 361.51237297058105
+Training Accuracy (in %): 91.9312275089964
+Test Accuracy (in %): 91.71470000000001
+Number of hidden layer units: 20
+Training time (in s): 414.5130271911621
+Training Accuracy (in %): 92.28708516593362
+Test Accuracy (in %): 91.9735
+Number of hidden layer units: 25
+Training time (in s): 430.64438819885254
+Training Accuracy (in %): 92.29908036785287
+Test Accuracy (in %): 92.038
+
+Part (e)
+Using Sigmoid function
+Training time (in s): 859.7374517917633
+Training Accuracy (in %): 92.32706917233106
+Test Accuracy (in %): 89.2471
+Using ReLU function
+Training time (in s): 52.95625400543213
+Training Accuracy (in %): 92.33106757297081
+Test Accuracy (in %): 92.3695
+
+Part (f)
+Training Accuracy (in %) (ReLU): 100.0
+Test Accuracy (in %) (ReLU): 99.2876
+Training Accuracy (in %) (Sigmoid): 99.9360255897641
+Test Accuracy (in %) (Sigmoid): 98.33070000000001
