@@ -1,2 +1,0 @@
-#!/bin/sh
-sshpass -p password ssh kerberos@hpc.iitd.ac.in

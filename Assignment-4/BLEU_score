@@ -1,0 +1,7 @@
+AlphaNet_final
+BLEU Score: 0.49216606013771247 (train_data)
+BLEU Score: 0.3111187378186736 (test_data)
+
+AlphaNet_attention_final
+BLEU Score: 0.7692535989870851 (train_data)
+BLEU Score: 0.5959289925481539 (test_data)
